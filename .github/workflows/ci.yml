@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python sources
+        run: |
+          python -m compileall src tests
+
+      - name: Run unit tests
+        run: |
+          python -m unittest discover -s tests
+
+      - name: Check final notebook
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("YawMisalignment_Final_Summary.ipynb")
+          assert path.exists(), "Final notebook is missing"
+
+          with path.open(encoding="utf-8") as f:
+              nb = json.load(f)
+
+          assert nb.get("nbformat") == 4
+          assert len(nb.get("cells", [])) > 0
+
+          print(
+              f"Notebook OK: "
+              f"{len(nb['cells'])} cells"
+          )
+          PY
+
+      - name: Validate submission CSVs
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          expected_columns = [
+              "turbine_id",
+              "date",
+              "yaw_misalignment_deg",
+              "cluster",
+          ]
+
+          expected = {
+              "submissions/Results_30_T3_0.csv": "PPP_WTG17",
+              "submissions/Results_30_T3_final.csv": "SSS_WTG06",
+          }
+
+          for filename, turbine in expected.items():
+              path = Path(filename)
+              assert path.exists(), f"Missing {filename}"
+
+              df = pd.read_csv(path)
+
+              assert list(df.columns) == expected_columns, (
+                  f"{filename}: wrong columns"
+              )
+
+              assert len(df) == 731, (
+                  f"{filename}: expected 731 rows, got {len(df)}"
+              )
+
+              assert df["turbine_id"].eq(turbine).all(), (
+                  f"{filename}: wrong turbine ID"
+              )
+
+              assert df["yaw_misalignment_deg"].notna().all(), (
+                  f"{filename}: NaN prediction"
+              )
+
+              assert df["yaw_misalignment_deg"].between(-90, 90).all(), (
+                  f"{filename}: prediction outside ±90°"
+              )
+
+              assert not df.duplicated(
+                  ["turbine_id", "date"]
+              ).any(), f"{filename}: duplicate dates"
+
+              assert df["cluster"].notna().all(), (
+                  f"{filename}: missing cluster"
+              )
+
+              print(
+                  filename,
+                  "OK",
+                  f"prediction={df['yaw_misalignment_deg'].iloc[0]:.3f}",
+              )
+          PY
+
+      - name: Check no private data is tracked
+        run: |
+          python - <<'PY'
+          import subprocess
+
+          files = subprocess.check_output(
+              ["git", "ls-files"],
+              text=True,
+          ).splitlines()
+
+          forbidden = [
+              f for f in files
+              if f.startswith("data/")
+              or f.endswith(".zip")
+              or f.endswith(".parquet")
+          ]
+
+          assert not forbidden, (
+              "Private/data files are tracked: "
+              + ", ".join(forbidden)
+          )
+
+          print("No private data files tracked.")
+          PY
