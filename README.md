@@ -1,149 +1,232 @@
-# Static Yaw Misalignment — Physics-Informed Long-Term Vane Calibration
+# Static Yaw Misalignment — Energy Hackdays / WeDoWind 2026
 
-[![CI](https://github.com/HuijiaoLuo/2026EnergyHacks_WeDoWind/actions/workflows/ci.yml/badge.svg)](https://github.com/HuijiaoLuo/2026EnergyHacks_WeDoWind/actions/workflows/ci.yml)
+Participant **33** · T3 submission
 
-This repository summarizes a physics-informed approach for estimating **static yaw misalignment** from wind-turbine SCADA.
+This repository contains our solution for the NADARA / WeDoWind static yaw misalignment challenge.
 
-> **Start here:** [`YawMisalignment_Final_Summary.ipynb`](YawMisalignment_Final_Summary.ipynb)
+The project started from a physics-informed power-vs-vane calibration model and later evolved into a **state-aware hybrid** after public leaderboard feedback showed that a constant-per-turbine prediction did not transfer well to the hidden target turbines.
 
-The strongest validated method in this development study is:
+## Current method
 
-$$
-\hat{y} = C - \theta^\star
-$$
+The original physics model estimates one long-term yaw level per turbine:
 
-where `theta_star` is the long-term median of rolling power-optimal vane angles from the frozen OpenOA-style B0 estimator. The final shared calibration is:
+\[
+\hat y_{\text{level}} = C - \theta^\star
+\]
+
+where:
+
+- \(\gamma = \mathrm{wrap}(WindDir - NacDir)\)
+- a 21-day centered window is used
+- power is normalized within 1.0-unit WindSpeed bins
+- the apparent optimum is the observed median \(\gamma\) of the highest normalized-power angle bin
+- \(\theta^\star\) is the long-term median apparent optimum
+- \(C\) is calibrated from the three labelled development turbines
+
+The frozen calibration gave:
+
+- `PPP_WTG17`: long-term level **-3.596°**
+- `SSS_WTG06`: long-term level **-4.568°**
+
+### Why the model changed
+
+Strict leave-one-turbine-out validation on the three labelled turbines gave a strong internal result:
+
+- macro MAE: **0.519°**
+
+However, the constant deployment did not transfer well to the hidden targets:
+
+| Round | RMSE | MAE |
+|---|---:|---:|
+| Public validation (`PPP_WTG17`) | 5.28° | 5.25° |
+| Final (`SSS_WTG06`) | 3.46° | 3.39° |
+
+This showed that the long-term level alone was not sufficient.
+
+## State-aware hybrid
+
+The current model preserves our physics-based absolute yaw level and adds a **piecewise-constant temporal state residual** derived from a teammate's independent state model.
+
+For each target:
+
+\[
+\delta(t)
+=
+\hat y_{\text{state}}(t)
+-
+\mathrm{mean}_t[\hat y_{\text{state}}(t)]
+\]
+
+and the final hybrid prediction is
+
+\[
+\boxed{
+\hat y_{\text{hybrid}}(t)
+=
+L_{\text{physics}} + \delta(t)
+}
+\]
+
+This means:
+
+- the **absolute long-term center remains our physics calibration**
+- the temporal model contributes only **zero-mean state changes**
+- the output is piecewise constant rather than noisy daily variation
+- cluster IDs represent the detected temporal regimes
+
+For the current hybrid:
+
+- validation target: **2 temporal clusters**
+- final target: **13 temporal clusters**
+- validation trajectory shift: **-0.061373°**
+- final trajectory shift: **-2.083073°**
+
+The state component is a team contribution; this repository does not claim the teammate's independent T0/T3 model as our own method. We use its temporal regime structure only after zero-mean centering.
+
+## Start here
+
+Open the executed notebook:
+
+**[`YawMisalignment_Final_Summary.ipynb`](YawMisalignment_Final_Summary.ipynb)**
+
+It contains:
+
+- the physical framing
+- method evolution
+- strict leave-one-turbine-out validation
+- robustness analysis
+- domain-shift diagnostics
+- hidden leaderboard feedback
+- the state-aware hybrid update
+- the final state tables used to construct the updated predictions
+
+The notebook is intentionally self-contained for inspection: the compact temporal state tables used by the hybrid are embedded in the notebook.
+
+## Repository structure
 
 ```text
-C_FINAL = -6.0793162066°
+.
+├── README.md
+├── FINAL_METHOD_SUMMARY.md
+├── YawMisalignment_Final_Summary.ipynb
+├── requirements.txt
+├── slides/
+│   └── final.pptx
+├── src/
+│   ├── baseline_loto_ridge.py
+│   ├── baseline_openoa_power_vane_updated.py
+│   └── make_final_submission_vane_level.py
+├── submissions/
+│   ├── Results_33_T3_0.csv
+│   ├── Results_33_T3_1.csv
+│   └── Results_33_T3_final.csv
+└── tests/
+    └── test_final_method.py
 ```
 
-Raw `WindDir - NacDir` is not treated as true yaw because vane/controller/reference bias can persist.
+### Submission files
 
-## Results
+`Results_33_T3_0.csv`
+: Historical validation submission from the original constant-per-turbine model.
 
-| Strict LOTO holdout | MAE (deg) |
-|---|---:|
-| PPP_WTG12 | 0.354 |
-| PPP_WTG13 | 0.997 |
-| PPP_WTG14 | 0.207 |
-| **Macro** | **0.519** |
+`Results_33_T3_1.csv`
+: Updated validation submission using the state-aware hybrid.
 
-The 28-day block-bootstrap macro median is **0.678°**, with a central robustness range of **[0.448°, 1.470°]**. These are sampling-robustness intervals, not formal confidence intervals.
+`Results_33_T3_final.csv`
+: State-aware hybrid final-round artifact maintained in this research repository.
 
-| Frozen target | Prediction | Bootstrap std | 95% robustness range |
-|---|---:|---:|---|
-| PPP_WTG17 | **-3.596°** | 0.375° | [-4.527°, -2.996°] |
-| SSS_WTG06 | **-4.568°** | 1.365° | [-6.644°, -2.280°] |
+The organizer submission repository enforces immutable merged submissions, so the files in this research repository may not always match the currently merged organizer-side final entry.
 
-Only **three labelled turbines** from one site were available. Calibration and sign selection exclude each outer holdout's labels, but the final formula was discovered through development on these same turbines. The reported LOTO result is therefore not independent new-site validation, and transfer to SSS is substantially less certain.
+## Original physics estimator
 
-## Method in brief
+The frozen B0 estimator uses:
 
-For each turbine, the frozen B0 estimator uses centered 21-day windows. Within each window, power is normalized by the median power in 1.0-unit wind-speed bins. The normalized power-vs-vane curve is evaluated over
+- operating WindSpeed range: 3–13
+- positive Power, RotSpeed and GenSpeed
+- Power below its 98th percentile
+- PitchAngle below its 95th percentile
+- \(\gamma\) restricted to ±30°
+- 1° angle bins
+- at least 20 samples per angle bin
+- at least 8 valid angle bins
+- 21-day centered rolling windows
+- power normalized by median power within WindSpeed bins
+- the observed median angle of the highest-power valid bin
 
-```text
-gamma = wrap(WindDir - NacDir)
-```
+Across the three labelled turbines, the long-term apparent optima were combined with a shared calibration constant
 
-within ±30°, using 1° angle bins with minimum sample and coverage requirements. The vane angle of the maximum valid median normalized-power bin is the daily apparent optimum. Its long-term median is `theta_star`.
+\[
+C_{\text{FINAL}} = -6.0793162066^\circ.
+\]
 
-The final model then applies the shared cross-turbine calibration:
+The strict outer leave-one-turbine-out constant predictions gave:
 
-```text
-yaw_hat = C_FINAL - theta_star
-```
+| Holdout | Prediction | MAE |
+|---|---:|---:|
+| `PPP_WTG12` | -2.744° | 0.354° |
+| `PPP_WTG13` | -6.348° | 0.997° |
+| `PPP_WTG14` | -1.711° | 0.207° |
+| **Macro** | — | **0.519°** |
 
-Geometry, context normalization, daily dynamics, residual ML, and a generic ML power surface were investigated but did not improve strict validation. Geometry is retained only as a domain-shift/risk diagnostic.
+These numbers are retained as **internal model-selection evidence**, not as external generalization performance.
 
-## Inspect the final analysis
+## Data and reproducibility
 
-The executed notebook is the main entry point:
+Challenge data are intentionally **not included** in this public repository.
 
-[`YawMisalignment_Final_Summary.ipynb`](YawMisalignment_Final_Summary.ipynb)
+In particular, the repository does not publish:
 
-For exact methodology, historical comparisons, provenance, limitations, and robustness details, see:
+- raw SCADA
+- the original `data/` directory
+- parquet datasets
+- challenge archives
+- local derived caches that may inherit challenge-data restrictions
 
-[`FINAL_METHOD_SUMMARY.md`](FINAL_METHOD_SUMMARY.md)
+Because of that, a clean clone cannot fully reproduce every numerical experiment from raw data.
 
-The notebook is committed with its executed outputs so the final analysis can be inspected directly on GitHub.
+The executed notebook is included so the analysis and recorded outputs can still be inspected. The state-aware deployment section embeds the compact state tables needed to reconstruct the current hybrid trajectories.
 
-## Reproduction note
+## Tests
 
-The public repository intentionally excludes the project data directory, raw SCADA, parquet files, and data ZIPs.
-
-As a result, the committed notebook can be **viewed**, but a clean clone cannot fully re-execute the numerical analysis without separately obtained challenge data or the local derived cache used during development.
-
-Install the code dependencies with:
+The public-repository test suite can be run with:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m unittest discover -s tests
 ```
 
-If you have the required local data, the repository code can be used to reproduce the frozen B0 estimates and final calibration. See [`FINAL_METHOD_SUMMARY.md`](FINAL_METHOD_SUMMARY.md) for the exact inputs and provenance.
+Data-dependent integration tests are skipped when the local challenge cache is absent. This is intentional for the public release.
 
-## Repository layout
+## Environment
 
-```text
-README.md
-FINAL_METHOD_SUMMARY.md
-YawMisalignment_Final_Summary.ipynb
-requirements.txt
-.gitignore
+A Python 3.11 environment is recommended:
 
-src/
-  baseline_loto_ridge.py
-  baseline_openoa_power_vane_updated.py
-  make_final_submission_vane_level.py
-
-tests/
-  test_final_method.py
-
-slides/
-  final.pptx
-
-submissions/
-  Results_30_T3_0.csv
-  Results_30_T3_final.csv
+```bash
+conda create -n yaw-baseline python=3.11 -y
+conda activate yaw-baseline
+pip install -r requirements.txt
 ```
 
-The following are intentionally **not included** in the public repository:
+## Important interpretation
 
-```text
-data/
-turbines_data.zip
-*.parquet
-archived experiments
-temporary outputs
-obsolete notebooks
-```
+`WindDir - NacDir` is **not treated as the true yaw label**.
 
-## Final submissions
+The vane/controller reference can itself be biased, so the method looks for the apparent angle associated with maximum normalized power and calibrates that relationship using labelled turbines.
 
-The frozen exported predictions are:
+The main lesson from the project is that two distinct components matter:
 
-```text
-PPP_WTG17  -> -3.596°
-SSS_WTG06  -> -4.568°
-```
+1. **absolute yaw level calibration**
+2. **temporal yaw-state detection**
 
-Challenge-format files are stored under `submissions/`:
-
-```text
-Results_30_T3_0.csv
-Results_30_T3_final.csv
-```
-
-Both use the required schema:
-
-```text
-turbine_id,date,yaw_misalignment_deg,cluster
-```
-
-with 731 daily rows.
+The original physics model captured the first component well on the development turbines. Hidden-set results showed that the second component was necessary for deployment, motivating the current state-aware hybrid.
 
 ## Limitations
 
-This is a compact hackathon solution rather than a universally validated yaw-calibration model.
+The labelled development set contains only three turbines, so cross-turbine validation has high variance and can give overly optimistic model-selection results.
 
-The calibration is supported by only three labelled turbines from one site, and the model was selected through repeated development on those same turbines. The shared calibration constant is not fully stable across years, constant predictions cannot follow actual yaw interventions, and cross-site transfer to SSS remains the main unresolved uncertainty.
+The final SSS turbine also represents a stronger domain shift than the PPP validation turbine. Geometry diagnostics showed that cross-site transfer is substantially harder.
+
+The current temporal state component is therefore best interpreted as a pragmatic hackathon solution rather than a fully validated general-purpose yaw estimator.
+
+---
+
+Repository: `HuijiaoLuo/2026EnergyHacks_WeDoWind`
