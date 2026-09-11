@@ -38,13 +38,15 @@ jobs:
         run: |
           python -m unittest discover -s tests
 
-      - name: Check final notebook
+      - name: Check release notebook
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          path = Path("YawMisalignment_Final_Summary.ipynb")
+          path = Path(
+              "YawMisalignment_Independent_Model_V7_5_Release.ipynb"
+          )
           assert path.exists(), f"Missing {path}"
 
           with path.open(encoding="utf-8") as f:
@@ -53,9 +55,21 @@ jobs:
           assert nb.get("nbformat") == 4
           assert len(nb.get("cells", [])) > 0
 
+          code_cells = [
+              cell
+              for cell in nb["cells"]
+              if cell.get("cell_type") == "code"
+          ]
+
+          assert len(code_cells) > 0, (
+              f"{path}: notebook contains no code cells"
+          )
+
           print(
               f"OK: {path} — "
-              f"{len(nb['cells'])} cells, nbformat {nb['nbformat']}"
+              f"{len(nb['cells'])} cells, "
+              f"{len(code_cells)} code cells, "
+              f"nbformat {nb['nbformat']}"
           )
           PY
 
