@@ -16,11 +16,11 @@ $$
 
 where:
 
-- \(\gamma = \mathrm{wrap}(WindDir - NacDir)\)
+- \($\gamma = \mathrm{wrap}(WindDir - NacDir)$\)
 - a 21-day centered window is used
 - power is normalized within 1.0-unit WindSpeed bins
 - the apparent optimum is the observed median \(\gamma\) of the highest normalized-power angle bin
-- \(\theta^\star\) is the long-term median apparent optimum
+- \($\theta^\star$) is the long-term median apparent optimum
 - \(C\) is calibrated from the three labelled development turbines
 
 The frozen calibration gave:
