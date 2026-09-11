@@ -10,9 +10,9 @@ The project started from a physics-informed power-vs-vane calibration model and 
 
 The original physics model estimates one long-term yaw level per turbine:
 
-\[
+$$
 \hat y_{\text{level}} = C - \theta^\star
-\]
+$$
 
 where:
 
@@ -49,23 +49,23 @@ The current model preserves our physics-based absolute yaw level and adds a **pi
 
 For each target:
 
-\[
+$$
 \delta(t)
 =
 \hat y_{\text{state}}(t)
 -
 \mathrm{mean}_t[\hat y_{\text{state}}(t)]
-\]
+$$
 
 and the final hybrid prediction is
 
-\[
+$$
 \boxed{
 \hat y_{\text{hybrid}}(t)
 =
 L_{\text{physics}} + \delta(t)
 }
-\]
+$$
 
 This means:
 
@@ -155,9 +155,9 @@ The frozen B0 estimator uses:
 
 Across the three labelled turbines, the long-term apparent optima were combined with a shared calibration constant
 
-\[
+$$
 C_{\text{FINAL}} = -6.0793162066^\circ.
-\]
+$$
 
 The strict outer leave-one-turbine-out constant predictions gave:
 
