@@ -1,14 +1,16 @@
 # Static Yaw Misalignment — Physics-Informed Long-Term Vane Calibration
 
+[![CI](https://github.com/HuijiaoLuo/2026EnergyHacks_WeDoWind/actions/workflows/ci.yml/badge.svg)](https://github.com/HuijiaoLuo/2026EnergyHacks_WeDoWind/actions/workflows/ci.yml)
+
 This repository summarizes a physics-informed approach for estimating **static yaw misalignment** from wind-turbine SCADA.
 
 > **Start here:** [`YawMisalignment_Final_Summary.ipynb`](YawMisalignment_Final_Summary.ipynb)
 
 The strongest validated method in this development study is:
 
-\[
+$$
 \hat{y} = C - \theta^\star
-\]
+$$
 
 where `theta_star` is the long-term median of rolling power-optimal vane angles from the frozen OpenOA-style B0 estimator. The final shared calibration is:
 
