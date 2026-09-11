@@ -6,3 +6,6 @@ __pycache__/
 *.parquet
 .DS_Store
 Thumbs.db
+
+# Local experiment outputs
+candidate_outputs/
