@@ -68,9 +68,9 @@ This showed that a single long-term level was not enough when the target turbine
 
 ## 2. Team hybrid experiment
 
-After the standalone model underperformed on the public validation target, I compared it with a teammate's independent state-aware T3 prediction.
+After the standalone model underperformed on the public validation target, I compared it with an independent state-aware T3 prediction developed by my teammate **Daniel**.
 
-The teammate model provided:
+Daniel's model provided:
 
 - the temporal state boundaries,
 - the cluster assignments,
@@ -78,17 +78,21 @@ The teammate model provided:
 
 I did **not** independently derive those state amplitudes in this experiment.
 
+Daniel's implementation and modelling work are available here:
+
+[Daniel — NADARA Yaw Misalignment Challenge](https://github.com/d-er/NADARA-Yaw-Misalignment-Challenge)
+
 I then re-centered the teammate trajectory so that its long-term mean matched my independently estimated physics level.
 
 In plain form:
 
-`hybrid(t) = my_physics_level + [teammate_prediction(t) - mean(teammate_prediction)]`
+`hybrid(t) = my_physics_level + [Daniel_prediction(t) - mean(Daniel_prediction)]`
 
 For `PPP_WTG17`:
 
 - my long-term physics level: `-3.596°`
-- teammate state levels: `-7.235°` and `+0.258°`
-- teammate temporal mean: approximately `-3.535°`
+- Daniel's state levels: `-7.235°` and `+0.258°`
+- Daniel's temporal mean: approximately `-3.535°`
 - re-centering shift: approximately `-0.061°`
 
 The resulting hybrid state levels were approximately:
@@ -113,7 +117,7 @@ Compared with the standalone constant model:
 
 The hybrid result is important because it demonstrated that temporal regime structure matters.
 
-However, it should not be interpreted as a standalone result of my physics model. The teammate prediction supplied both the change-point structure and the relative state-to-state yaw amplitudes. My contribution in this experiment was the long-term absolute re-centering.
+However, it should not be interpreted as a standalone result of my physics model. Daniel's prediction supplied both the change-point structure and the relative state-to-state yaw amplitudes. My contribution in this experiment was the long-term absolute re-centering.
 
 This experiment is kept in the repository because it is an important part of the modelling history and because it motivated the next independent model.
 
@@ -194,7 +198,7 @@ The new independent state-aware model is developed separately from the historica
 ### Submission history
 
 - `Results_33_T3_0.csv` — standalone constant physics validation submission.
-- `Results_33_T3_1.csv` — team hybrid validation submission using teammate state predictions re-centered to my physics level.
+- `Results_33_T3_1.csv` — team hybrid validation submission using Daniel's state-aware prediction re-centered to my physics level.
 - `Results_33_T3_final.csv` — final-round artifact currently stored in this research repository.
 
 The organizer submission repository has its own immutable-submission workflow, so repository artifacts and organizer-side submission history may not always be identical.
