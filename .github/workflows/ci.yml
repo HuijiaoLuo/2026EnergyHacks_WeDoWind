@@ -1,55 +1,139 @@
-- name: Validate submission artifacts
-  run: |
-    python - <<'PY'
-    from pathlib import Path
-    import numpy as np
-    import pandas as pd
+name: CI
 
-    expected = {
-        "submissions/Results_33_T3_0.csv": "PPP_WTG17",
-        "submissions/Results_33_T3_1.csv": "PPP_WTG17",
-        "submissions/Results_33_T3_final.csv": "SSS_WTG06",
-    }
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
 
-    required_columns = [
-        "turbine_id",
-        "date",
-        "yaw_misalignment_deg",
-        "cluster",
-    ]
+permissions:
+  contents: read
 
-    for filename, turbine_id in expected.items():
-        path = Path(filename)
-        assert path.exists(), f"Missing {filename}"
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-        df = pd.read_csv(path)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
 
-        assert len(df) == 731, f"{filename}: expected 731 rows, got {len(df)}"
-        assert list(df.columns) == required_columns, (
-            f"{filename}: unexpected columns {list(df.columns)}"
-        )
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-        assert df["turbine_id"].nunique() == 1
-        assert df["turbine_id"].iloc[0] == turbine_id
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-        dates = pd.to_datetime(df["date"])
-        assert dates.nunique() == 731, f"{filename}: duplicate dates"
-        assert dates.min() == pd.Timestamp("2023-01-01")
-        assert dates.max() == pd.Timestamp("2024-12-31")
+      - name: Compile Python sources
+        run: |
+          python -m compileall src tests
 
-        yaw = pd.to_numeric(df["yaw_misalignment_deg"], errors="coerce")
-        assert np.isfinite(yaw).all(), f"{filename}: non-finite yaw"
-        assert (yaw.abs() <= 90).all(), f"{filename}: yaw outside ±90°"
+      - name: Run tests
+        run: |
+          python -m unittest discover -s tests
 
-        cluster = df["cluster"]
-        assert cluster.isna().all() or cluster.notna().all(), (
-            f"{filename}: cluster must be fully empty or fully filled"
-        )
+      - name: Check final notebook
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-        print(
-            f"OK: {filename} — "
-            f"{len(df)} rows, "
-            f"{yaw.nunique()} yaw levels, "
-            f"{cluster.nunique()} clusters"
-        )
-    PY
+          path = Path("YawMisalignment_Final_Summary.ipynb")
+          assert path.exists(), f"Missing {path}"
+
+          with path.open(encoding="utf-8") as f:
+              nb = json.load(f)
+
+          assert nb.get("nbformat") == 4
+          assert len(nb.get("cells", [])) > 0
+
+          print(
+              f"OK: {path} — "
+              f"{len(nb['cells'])} cells, nbformat {nb['nbformat']}"
+          )
+          PY
+
+      - name: Validate submission artifacts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          expected = {
+              "submissions/Results_33_T3_0.csv": "PPP_WTG17",
+              "submissions/Results_33_T3_1.csv": "PPP_WTG17",
+              "submissions/Results_33_T3_final.csv": "SSS_WTG06",
+          }
+
+          required_columns = [
+              "turbine_id",
+              "date",
+              "yaw_misalignment_deg",
+              "cluster",
+          ]
+
+          for filename, turbine_id in expected.items():
+              path = Path(filename)
+              assert path.exists(), f"Missing {filename}"
+
+              df = pd.read_csv(path)
+
+              assert len(df) == 731, (
+                  f"{filename}: expected 731 rows, got {len(df)}"
+              )
+
+              assert list(df.columns) == required_columns, (
+                  f"{filename}: unexpected columns {list(df.columns)}"
+              )
+
+              assert df["turbine_id"].nunique() == 1
+              assert df["turbine_id"].iloc[0] == turbine_id
+
+              dates = pd.to_datetime(df["date"])
+              assert dates.nunique() == 731, (
+                  f"{filename}: duplicate dates"
+              )
+              assert dates.min() == pd.Timestamp("2023-01-01")
+              assert dates.max() == pd.Timestamp("2024-12-31")
+
+              yaw = pd.to_numeric(
+                  df["yaw_misalignment_deg"],
+                  errors="coerce",
+              )
+
+              assert np.isfinite(yaw).all(), (
+                  f"{filename}: non-finite yaw"
+              )
+              assert (yaw.abs() <= 90).all(), (
+                  f"{filename}: yaw outside ±90°"
+              )
+
+              cluster = df["cluster"]
+              assert (
+                  cluster.isna().all()
+                  or cluster.notna().all()
+              ), f"{filename}: cluster must be fully empty or filled"
+
+              print(
+                  f"OK: {filename} — "
+                  f"{len(df)} rows, "
+                  f"{yaw.nunique()} yaw levels, "
+                  f"{cluster.nunique()} clusters"
+              )
+          PY
+
+      - name: Check release hygiene
+        run: |
+          if git ls-files | grep -E '(^data/|\.zip$|\.parquet$|\.inspect\.ndjson$)'; then
+            echo "Forbidden release artifact found."
+            exit 1
+          fi
+
+          echo "OK: release hygiene"
