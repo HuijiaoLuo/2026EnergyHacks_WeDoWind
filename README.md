@@ -47,25 +47,13 @@ This showed that the long-term level alone was not sufficient.
 
 The current model preserves our physics-based absolute yaw level and adds a **piecewise-constant temporal state residual** derived from a teammate's independent state model.
 
-For each target:
+For each target, we remove the temporal mean from the state-aware prediction:
 
-$$
-\delta(t)
-=
-\hat y_{\mathrm{state}}(t)
--
-\mathrm{mean}_t\left[\hat y_{\mathrm{state}}(t)\right]
-$$
+`delta(t) = y_state(t) - mean_t[y_state(t)]`
 
-and the hybrid prediction is
+The hybrid prediction is then:
 
-$$
-\boxed{
-\hat y_{\mathrm{hybrid}}(t)
-=
-L_{\mathrm{physics}} + \delta(t)
-}
-$$
+`y_hybrid(t) = L_physics + delta(t)`
 
 This means:
 
