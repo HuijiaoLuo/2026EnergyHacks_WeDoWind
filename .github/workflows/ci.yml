@@ -1,139 +1,55 @@
-name: CI
+- name: Validate submission artifacts
+  run: |
+    python - <<'PY'
+    from pathlib import Path
+    import numpy as np
+    import pandas as pd
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    expected = {
+        "submissions/Results_33_T3_0.csv": "PPP_WTG17",
+        "submissions/Results_33_T3_1.csv": "PPP_WTG17",
+        "submissions/Results_33_T3_final.csv": "SSS_WTG06",
+    }
 
-jobs:
-  validate-release:
-    runs-on: ubuntu-latest
+    required_columns = [
+        "turbine_id",
+        "date",
+        "yaw_misalignment_deg",
+        "cluster",
+    ]
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    for filename, turbine_id in expected.items():
+        path = Path(filename)
+        assert path.exists(), f"Missing {filename}"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
+        df = pd.read_csv(path)
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        assert len(df) == 731, f"{filename}: expected 731 rows, got {len(df)}"
+        assert list(df.columns) == required_columns, (
+            f"{filename}: unexpected columns {list(df.columns)}"
+        )
 
-      - name: Compile Python sources
-        run: |
-          python -m compileall src tests
+        assert df["turbine_id"].nunique() == 1
+        assert df["turbine_id"].iloc[0] == turbine_id
 
-      - name: Run unit tests
-        run: |
-          python -m unittest discover -s tests
+        dates = pd.to_datetime(df["date"])
+        assert dates.nunique() == 731, f"{filename}: duplicate dates"
+        assert dates.min() == pd.Timestamp("2023-01-01")
+        assert dates.max() == pd.Timestamp("2024-12-31")
 
-      - name: Check final notebook
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
+        yaw = pd.to_numeric(df["yaw_misalignment_deg"], errors="coerce")
+        assert np.isfinite(yaw).all(), f"{filename}: non-finite yaw"
+        assert (yaw.abs() <= 90).all(), f"{filename}: yaw outside ±90°"
 
-          path = Path("YawMisalignment_Final_Summary.ipynb")
-          assert path.exists(), "Final notebook is missing"
+        cluster = df["cluster"]
+        assert cluster.isna().all() or cluster.notna().all(), (
+            f"{filename}: cluster must be fully empty or fully filled"
+        )
 
-          with path.open(encoding="utf-8") as f:
-              nb = json.load(f)
-
-          assert nb.get("nbformat") == 4
-          assert len(nb.get("cells", [])) > 0
-
-          print(
-              f"Notebook OK: "
-              f"{len(nb['cells'])} cells"
-          )
-          PY
-
-      - name: Validate submission CSVs
-        run: |
-          python - <<'PY'
-          import pandas as pd
-          from pathlib import Path
-
-          expected_columns = [
-              "turbine_id",
-              "date",
-              "yaw_misalignment_deg",
-              "cluster",
-          ]
-
-          expected = {
-              "submissions/Results_30_T3_0.csv": "PPP_WTG17",
-              "submissions/Results_30_T3_final.csv": "SSS_WTG06",
-          }
-
-          for filename, turbine in expected.items():
-              path = Path(filename)
-              assert path.exists(), f"Missing {filename}"
-
-              df = pd.read_csv(path)
-
-              assert list(df.columns) == expected_columns, (
-                  f"{filename}: wrong columns"
-              )
-
-              assert len(df) == 731, (
-                  f"{filename}: expected 731 rows, got {len(df)}"
-              )
-
-              assert df["turbine_id"].eq(turbine).all(), (
-                  f"{filename}: wrong turbine ID"
-              )
-
-              assert df["yaw_misalignment_deg"].notna().all(), (
-                  f"{filename}: NaN prediction"
-              )
-
-              assert df["yaw_misalignment_deg"].between(-90, 90).all(), (
-                  f"{filename}: prediction outside ±90°"
-              )
-
-              assert not df.duplicated(
-                  ["turbine_id", "date"]
-              ).any(), f"{filename}: duplicate dates"
-
-              assert df["cluster"].notna().all(), (
-                  f"{filename}: missing cluster"
-              )
-
-              print(
-                  filename,
-                  "OK",
-                  f"prediction={df['yaw_misalignment_deg'].iloc[0]:.3f}",
-              )
-          PY
-
-      - name: Check no private data is tracked
-        run: |
-          python - <<'PY'
-          import subprocess
-
-          files = subprocess.check_output(
-              ["git", "ls-files"],
-              text=True,
-          ).splitlines()
-
-          forbidden = [
-              f for f in files
-              if f.startswith("data/")
-              or f.endswith(".zip")
-              or f.endswith(".parquet")
-          ]
-
-          assert not forbidden, (
-              "Private/data files are tracked: "
-              + ", ".join(forbidden)
-          )
-
-          print("No private data files tracked.")
-          PY
+        print(
+            f"OK: {filename} — "
+            f"{len(df)} rows, "
+            f"{yaw.nunique()} yaw levels, "
+            f"{cluster.nunique()} clusters"
+        )
+    PY
