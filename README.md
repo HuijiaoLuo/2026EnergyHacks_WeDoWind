@@ -1,107 +1,173 @@
 # Static Yaw Misalignment — Energy Hackdays / WeDoWind 2026
 
-Participant **33** · T3 submission
+Participant **33** · T3
 
-This repository contains our solution for the NADARA / WeDoWind static yaw misalignment challenge.
+This repository documents my work on the NADARA / WeDoWind static yaw misalignment challenge.
 
-The project started from a physics-informed power-vs-vane calibration model and later evolved into a **state-aware hybrid** after public leaderboard feedback showed that a constant-per-turbine prediction did not transfer well to the hidden target turbines.
+The project evolved through three stages:
 
-## Current method
+1. an independent physics-informed long-term yaw model,
+2. a team hybrid experiment that combined my long-term calibration with a teammate's state-aware prediction,
+3. a new independent state-aware model currently being developed from SCADA only.
 
-The original physics model estimates one long-term yaw level per turbine:
+The distinction between these stages matters, especially for attribution and interpretation.
 
-$$
-\hat y_{\mathrm{level}} = C - \theta^\star
-$$
+## 1. Independent physics model
+
+My original model estimates a long-term yaw level from SCADA using the apparent power-optimal vane angle.
+
+The core relationship is:
+
+`yaw_level = C_FINAL - theta_star`
 
 where:
 
-- $\gamma = \mathrm{wrap}(WindDir - NacDir)$
-- a 21-day centered window is used
-- power is normalized within 1.0-unit WindSpeed bins
-- the apparent optimum is the observed median $\gamma$ of the highest normalized-power angle bin
-- $\theta^\star$ is the long-term median apparent optimum
-- $C$ is calibrated from the three labelled development turbines
+- `gamma = wrap(WindDir - NacDir)`
+- SCADA are filtered to normal operating conditions
+- a 21-day centered rolling window is used
+- Power is normalized within 1.0-unit WindSpeed bins
+- only `gamma` within ±30° is used
+- the observed median angle of the highest normalized-power bin is taken as the apparent optimum
+- `theta_star` is the long-term median of valid rolling-window optima
+- `C_FINAL` is calibrated from the three labelled development turbines
 
-The frozen calibration gave:
+The frozen calibration constant was:
 
-- `PPP_WTG17`: long-term level **-3.596°**
-- `SSS_WTG06`: long-term level **-4.568°**
+`C_FINAL = -6.0793162066°`
 
-### Why the model changed
+The resulting target-level predictions were:
 
-Strict leave-one-turbine-out validation on the three labelled turbines gave a strong internal result:
+- `PPP_WTG17`: `-3.596°`
+- `SSS_WTG06`: `-4.568°`
 
-- macro MAE: **0.519°**
+This model predicts one constant yaw level for the full 731-day target period.
 
-However, the original constant deployment did not transfer well to the hidden targets:
+### Internal validation
+
+Strict leave-one-turbine-out validation across the three labelled turbines gave:
+
+| Holdout | Prediction | MAE |
+|---|---:|---:|
+| `PPP_WTG12` | -2.744° | 0.354° |
+| `PPP_WTG13` | -6.348° | 0.997° |
+| `PPP_WTG14` | -1.711° | 0.207° |
+| **Macro** | — | **0.519°** |
+
+This was strong internal evidence, but it turned out to be too optimistic as an estimate of hidden-target performance.
+
+### Hidden leaderboard result
+
+The standalone constant model scored:
 
 | Round | RMSE | MAE |
 |---|---:|---:|
 | Public validation (`PPP_WTG17`) | 5.28° | 5.25° |
 | Final (`SSS_WTG06`) | 3.46° | 3.39° |
 
-This showed that the long-term level alone was not sufficient.
+This showed that a single long-term level was not enough when the target turbine changed yaw state over time.
 
-## State-aware hybrid
+## 2. Team hybrid experiment
 
-The current model preserves our physics-based absolute yaw level and adds a **piecewise-constant temporal state residual** derived from a teammate's independent state model.
+After the standalone model underperformed on the public validation target, I compared it with a teammate's independent state-aware T3 prediction.
 
-For each target, we remove the temporal mean from the state-aware prediction:
+The teammate model provided:
 
-`delta(t) = y_state(t) - mean_t[y_state(t)]`
+- the temporal state boundaries,
+- the cluster assignments,
+- and the relative yaw differences between states.
 
-The hybrid prediction is then:
+I did **not** independently derive those state amplitudes in this experiment.
 
-`y_hybrid(t) = L_physics + delta(t)`
+I then re-centered the teammate trajectory so that its long-term mean matched my independently estimated physics level.
 
-This means:
+In plain form:
 
-- the **absolute long-term center remains our physics calibration**
-- the temporal model contributes only **zero-mean state changes**
-- the output is piecewise constant rather than noisy daily variation
-- cluster IDs represent the detected temporal regimes
+`hybrid(t) = my_physics_level + [teammate_prediction(t) - mean(teammate_prediction)]`
 
-For the current hybrid:
+For `PPP_WTG17`:
 
-- validation target: **2 temporal clusters**
-- final target: **13 temporal clusters**
-- validation trajectory shift: **-0.061373°**
-- final trajectory shift: **-2.083073°**
+- my long-term physics level: `-3.596°`
+- teammate state levels: `-7.235°` and `+0.258°`
+- teammate temporal mean: approximately `-3.535°`
+- re-centering shift: approximately `-0.061°`
 
-The state component is a team contribution. This repository does not claim the teammate's independent T0/T3 method as our own; we use its temporal regime structure only after zero-mean centering.
+The resulting hybrid state levels were approximately:
 
-## Public validation update
+- cluster 0: `-7.296°`
+- cluster 1: `+0.197°`
 
-The state-aware hybrid substantially improved the public validation result:
+### Public validation result
 
-| Submission | RMSE | MAE | Cluster ARI |
-|---|---:|---:|---:|
-| Original constant T3 (`Sub #0`) | 5.28° | 5.25° | — |
-| State-aware hybrid T3 (`Sub #1`) | **1.58°** | **1.49°** | **1.00** |
+This team hybrid submission (`T3 Sub #1`) scored:
 
-The perfect **Cluster ARI = 1.00** shows that the temporal regime segmentation matched the hidden validation clusters exactly.
+| RMSE | MAE | Cluster ARI |
+|---:|---:|---:|
+| **1.58°** | **1.49°** | **1.00** |
 
-The remaining error is therefore mainly associated with **cluster-level yaw calibration**, not with the timing of state changes.
+Compared with the standalone constant model:
+
+| Model | RMSE | MAE |
+|---|---:|---:|
+| Independent constant physics model | 5.28° | 5.25° |
+| Team hybrid | **1.58°** | **1.49°** |
+
+The hybrid result is important because it demonstrated that temporal regime structure matters.
+
+However, it should not be interpreted as a standalone result of my physics model. The teammate prediction supplied both the change-point structure and the relative state-to-state yaw amplitudes. My contribution in this experiment was the long-term absolute re-centering.
+
+This experiment is kept in the repository because it is an important part of the modelling history and because it motivated the next independent model.
+
+## 3. New independent state-aware model
+
+The next model removes the dependence on teammate yaw predictions.
+
+The target pipeline is:
+
+`SCADA -> apparent-optimum time series -> independent change-point detection -> regime-level physics optimum -> yaw calibration`
+
+The new model is designed to estimate both:
+
+- when the yaw state changes,
+- and how large each state-level yaw offset is,
+
+using only the challenge SCADA plus the three labelled training turbines.
+
+The current modelling plan is:
+
+- use a shorter rolling B0 signal for change-point detection,
+- detect piecewise-constant regimes directly from SCADA,
+- pool SCADA within each detected regime,
+- estimate one power-optimal vane angle per regime,
+- calibrate state-level yaw amplitude using labelled turbines,
+- evaluate the complete pipeline with strict turbine-level validation before submitting another leaderboard entry.
+
+This independent state-aware model is still under development. No leaderboard result is claimed for it yet.
+
+## Why this progression matters
+
+This project became a useful example of model-selection risk.
+
+The first model looked excellent under internal leave-one-turbine-out validation but failed to transfer to the hidden target.
+
+The team hybrid then showed that the missing information was largely temporal state structure.
+
+The current goal is to reproduce that capability independently from SCADA rather than relying on another model's predicted state trajectory.
+
+For a portfolio, the main technical lessons are:
+
+- physics-based feature construction can be more transferable than direct SCADA regression,
+- strong internal cross-validation can still be misleading with only three labelled turbines,
+- long-term calibration and temporal state detection are separate modelling problems,
+- external validation is valuable for identifying which part of the modelling assumption failed,
+- attribution matters when combining independently developed models.
 
 ## Start here
 
-Open the executed notebook:
+The executed summary notebook is:
 
 [`YawMisalignment_Final_Summary.ipynb`](YawMisalignment_Final_Summary.ipynb)
 
-It contains:
-
-- the physical framing
-- method evolution
-- strict leave-one-turbine-out validation
-- robustness analysis
-- domain-shift diagnostics
-- hidden leaderboard feedback
-- the state-aware hybrid update
-- the final state tables used to construct the updated predictions
-
-The notebook is intentionally self-contained for inspection. The compact temporal state tables used by the hybrid are embedded directly in the notebook.
+The new independent state-aware model is developed separately from the historical summary so that the original evidence and the new modelling work remain distinguishable.
 
 ## Repository structure
 
@@ -125,72 +191,38 @@ The notebook is intentionally self-contained for inspection. The compact tempora
     └── test_final_method.py
 ```
 
-### Submission files
+### Submission history
 
-- **`Results_33_T3_0.csv`** — historical validation submission from the original constant-per-turbine model.
-- **`Results_33_T3_1.csv`** — updated validation submission using the state-aware hybrid.
-- **`Results_33_T3_final.csv`** — state-aware hybrid final-round artifact maintained in this research repository.
+- `Results_33_T3_0.csv` — standalone constant physics validation submission.
+- `Results_33_T3_1.csv` — team hybrid validation submission using teammate state predictions re-centered to my physics level.
+- `Results_33_T3_final.csv` — final-round artifact currently stored in this research repository.
 
-The organizer submission repository enforces immutable merged submissions, so files in this research repository may not always match the currently merged organizer-side final entry.
-
-## Original physics estimator
-
-The frozen B0 estimator uses:
-
-- operating WindSpeed range: 3–13
-- positive Power, RotSpeed, and GenSpeed
-- Power below its 98th percentile
-- PitchAngle below its 95th percentile
-- $\gamma$ restricted to ±30°
-- 1° angle bins
-- at least 20 samples per angle bin
-- at least 8 valid angle bins
-- 21-day centered rolling windows
-- power normalized by median power within WindSpeed bins
-- the observed median angle of the highest-power valid bin
-
-Across the three labelled turbines, the long-term apparent optima were combined with a shared calibration constant:
-
-$$
-C_{\mathrm{FINAL}} = -6.0793162066^\circ
-$$
-
-The strict outer leave-one-turbine-out constant predictions gave:
-
-| Holdout | Prediction | MAE |
-|---|---:|---:|
-| `PPP_WTG12` | -2.744° | 0.354° |
-| `PPP_WTG13` | -6.348° | 0.997° |
-| `PPP_WTG14` | -1.711° | 0.207° |
-| **Macro** | — | **0.519°** |
-
-These numbers are retained as **internal model-selection evidence**, not as external generalization performance.
+The organizer submission repository has its own immutable-submission workflow, so repository artifacts and organizer-side submission history may not always be identical.
 
 ## Data and reproducibility
 
-Challenge data are intentionally **not included** in this public repository.
+Challenge data are intentionally not included in this public repository.
 
-In particular, the repository does not publish:
+The repository does not publish:
 
-- raw SCADA
-- the original `data/` directory
-- parquet datasets
-- challenge archives
-- local derived caches that may inherit challenge-data restrictions
+- raw SCADA,
+- parquet challenge files,
+- challenge archives,
+- or local derived caches that may inherit challenge-data restrictions.
 
-Because of that, a clean clone cannot fully reproduce every numerical experiment from raw data.
+Because of that, a clean clone cannot reproduce all numerical experiments from raw data.
 
-The executed notebook is included so the analysis and recorded outputs can still be inspected. The state-aware deployment section embeds the compact state tables needed to reconstruct the current hybrid trajectories.
+The executed notebook is included so the modelling history and recorded outputs can still be inspected.
 
 ## Tests
 
-The public-repository test suite can be run with:
+Run:
 
 ```bash
 python -m unittest discover -s tests
 ```
 
-Data-dependent integration tests are skipped when the local challenge cache is absent. This is intentional for the public release.
+Data-dependent tests are skipped when the local challenge cache is absent.
 
 ## Environment
 
@@ -204,24 +236,9 @@ pip install -r requirements.txt
 
 ## Important interpretation
 
-`WindDir - NacDir` is **not treated as the true yaw label**.
+`WindDir - NacDir` is not treated as the true yaw label.
 
-The vane/controller reference can itself be biased, so the method looks for the apparent angle associated with maximum normalized power and calibrates that relationship using labelled turbines.
-
-The main lesson from the project is that two distinct components matter:
-
-1. **absolute yaw level calibration**
-2. **temporal yaw-state detection**
-
-The original physics model captured the first component well on the development turbines. Hidden-set results showed that the second component was necessary for deployment, motivating the current state-aware hybrid.
-
-## Limitations
-
-The labelled development set contains only three turbines, so cross-turbine validation has high variance and can give overly optimistic model-selection results.
-
-The final SSS turbine also represents a stronger domain shift than the PPP validation turbine. Geometry diagnostics showed that cross-site transfer is substantially harder.
-
-The current temporal state component is therefore best interpreted as a pragmatic hackathon solution rather than a fully validated general-purpose yaw estimator.
+The nacelle/vane reference may itself be biased, so the physics model searches for the apparent angle associated with maximum normalized power and calibrates that relationship using labelled turbines.
 
 ---
 
