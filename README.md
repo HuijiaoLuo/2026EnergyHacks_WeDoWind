@@ -389,9 +389,10 @@ This project exposed several useful lessons:
 ├├── src/
 │   ├── baseline_loto_ridge.py
 │   ├── baseline_openoa_power_vane_updated.py
-│   ├── fleet_context_v6.py
-│   ├── yaw_relative_state_v6.py
-│   ├── yaw_model_v6.py
+│   ├── fleet_context.py
+│   ├── yaw_relative_state.py
+│   ├── yaw_model.py
+│   ├── yaw_self_response.py
 │   └── make_final_submission_vane_level.py
 ├── submissions/
 │   ├── Results_33_T3_0.csv
