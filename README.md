@@ -1,4 +1,4 @@
-# Static Yaw Misalignment — Energy Hackdays / WeDoWind & NADARA 2026
+# Static Yaw Misalignment — Energydata Hackdays / WeDoWind & NADARA 2026
 
 **Participant 33 · Independent modelling / portfolio release**
 
