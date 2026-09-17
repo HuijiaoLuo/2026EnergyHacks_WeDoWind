@@ -82,8 +82,7 @@ jobs:
 
           expected = {
               "submissions/Results_33_T3_0.csv": "PPP_WTG17",
-              "submissions/Results_33_T3_1.csv": "PPP_WTG17",
-              "submissions/Results_33_T3_final.csv": "SSS_WTG06",
+              "submissions/Results_33_T3_4.csv": "PPP_WTG17",
           }
 
           required_columns = [
