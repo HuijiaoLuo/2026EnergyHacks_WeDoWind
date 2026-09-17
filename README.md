@@ -1,4 +1,4 @@
-# Static Yaw Misalignment — Energy Hackdays / WeDoWind 2026
+# Static Yaw Misalignment — Energy Hackdays / WeDoWind & NADARA 2026
 
 **Participant 33 · Independent modelling / portfolio release**
 
@@ -92,6 +92,16 @@ For target turbine `i` and neighbour `j`, the pipeline:
 5. builds a neighbour-only background residual to identify common-mode motion.
 
 Nearby turbines therefore act as a **local measurement field**.
+### Label-free state segmentation
+
+Segmentation is performed before supervised calibration:
+
+1. smooth the daily robust relative-heading signal;
+2. nominate persistent before/after changes with a rolling detector, supplemented by conservative L2/PELT segmentation for long two-sided regimes;
+3. merge near-duplicate candidates and reject sensor-like jumps, local common-mode motion, weak persistence, and insufficient pair agreement;
+4. freeze the surviving boundary dates before estimating state amplitudes or fitting the shared calibration.
+
+The accepted boundaries partition the daily relative-heading trajectory into persistent states. Soft pair-quality weighting and partial-amplitude blending can change state levels, but cannot create or move boundaries.
 
 Candidate state changes are rejected when they are better explained by:
 - sensor / encoder-like jumps;
