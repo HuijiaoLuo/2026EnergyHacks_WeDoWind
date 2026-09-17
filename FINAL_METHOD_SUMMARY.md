@@ -412,12 +412,7 @@ The full correction removes that amplitude shrinkage while keeping the **same ac
 The retained candidate interpolates the two:
 
 $$
-c_{i,\lambda}
-=
-c_{i,\mathrm{stable}}
-+
-\lambda
-(c_{i,\mathrm{full}}-c_{i,\mathrm{stable}})
+c_{i,\lambda}=c_{i,\mathrm{stable}}+\lambda(c_{i,\mathrm{full}}-c_{i,\mathrm{stable}})
 $$
 
 with:
