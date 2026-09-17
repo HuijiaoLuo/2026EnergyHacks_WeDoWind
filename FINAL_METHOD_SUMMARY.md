@@ -1,218 +1,894 @@
-# Static Yaw Misalignment — Final Method
+# Final Method Summary — Static Yaw Misalignment
 
-## 1. Problem
+**Energy Hackdays / WeDoWind 2026 · Participant 33**
 
-Estimate persistent yaw misalignment from cleaned 15-minute wind-turbine SCADA.
-`gamma = wrap(WindDir - NacDir)` in `[-180°, 180°)` is a vane/controller-frame
-measurement, not the true yaw label. Reference and aerodynamic biases can remain.
-The qualitative yaw-loss relation `P ~ P0*cos(theta)^p` motivates looking for
-peak relative power; the final method does not estimate `p` or invert this law.
+This document contains the detailed modelling record behind the recruiter-facing [`README.md`](README.md).
 
-## 2. Data split
+It preserves the full methodological progression, calibration details, strict leave-one-turbine-out validation, model-selection audit, public-target diagnostics, ownership boundaries, and reproducibility notes.
 
-- Labelled development: `PPP_WTG12`, `PPP_WTG13`, `PPP_WTG14`.
-- Public validation target: `PPP_WTG17`; final target: `SSS_WTG06`.
-- Other PPP/SSS turbines provide unlabeled context, used only in controlled diagnostics.
-- Input: private `turbines_data.zip`; site-relative layouts: the two location CSVs.
-- Submission calendar: every day from 2023-01-01 through 2024-12-31 (731 days).
+---
 
-## 3. Validation philosophy
+## 1. Challenge setting
 
-Use strict outer leave-one-turbine-out (LOTO), never a random row split. Each
-fold estimates its calibration from the other two labelled turbines. The held-out
-turbine supplies only its unlabeled long-term vane estimate. Full-history windows
-make this offline/transductive validation, not prospective time forecasting.
+The modelling objective is to use a **two-year historical SCADA dataset to build a general yaw-misalignment model that transfers to previously unseen turbines**.
 
-The sign check in original `TrainValidation.ipynb` cell 26 (zero-based) selects
-between ±theta using the two training-turbine means, with an intercept fitted
-on those same means. All three outer folds select minus. It is **training-only
-sign selection inside outer LOTO**, not an explicit additional inner-CV loop.
-The formula itself was discovered after examining these three turbines; repeated
-development on them limits the independence of the final performance estimate.
+Two challenge data settings are used:
 
-## 4. Frozen B0 estimator
+- **T0 — unlabeled dataset:** two years of SCADA data without yaw-misalignment labels.
+- **T3 — labeled dataset:** two years of SCADA data for three turbines with yaw-misalignment labels.
 
-Reuse `baseline_openoa_power_vane_updated.py` and the operating filter from
-`baseline_loto_ridge.py`: WindSpeed in [3,13], positive Power/RotSpeed/GenSpeed,
-then Power below its 98th percentile and PitchAngle below its 95th percentile.
-Signals are anonymized/scaled; these are not physical m/s or kW cutoffs.
+In this repository, `T0` and `T3` refer to the **data setting**, not to submission number.
 
-Each target date uses 10 previous days, that date, and 10 following days.
-Within the window, normalize `Power / median(Power | WindSpeed bin)` using
-1.0-unit bins. Restrict gamma to [-30,+30] degrees, then use 1-degree angle
-bins, at least 20 samples/bin and at least 8 valid bins. The selected angle is
-the **observed median gamma** in the valid bin with maximum median normalized
-power. This is the formal raw argmax B0, not its quadratic diagnostic.
+The three labeled turbines are:
 
-`theta_star = median(valid rolling theta_hat_argmax)` over the full period.
-Failed B0 windows are omitted from this median; the final constant still covers
-all dates. Labelled evaluation dates are those surviving the original operating
-filter: 725 / 727 / 727 days, not the full submission calendar.
+- `PPP_WTG12`
+- `PPP_WTG13`
+- `PPP_WTG14`
 
-## 5. Discovery and frozen equation
+The main unseen targets discussed in this repository are:
 
-`C_i = mean(target_i) + theta_star_i`; estimate C as the equally weighted mean
-of training-turbine C_i, not a day-count-weighted mean.
+- `PPP_WTG17` — public validation target
+- `SSS_WTG06` — final target / deployment target in the challenge workflow
 
-| Turbine | Target mean | theta_star | C_i |
-|---|---:|---:|---:|
-| PPP_WTG12 | -2.428 | -3.441 | -5.868 |
-| PPP_WTG13 | -6.613 | +0.357 | -6.256 |
-| PPP_WTG14 | -1.762 | -4.351 | -6.114 |
-
-**Final model: `yaw_hat = C_FINAL - theta_star`.**
-
-`C_FINAL = -6.079316206588366°` (displayed as -6.079°).
-No geometry correction, site shift, residual ML or daily dynamics enter it.
-
-## 6. Strict LOTO results
-
-| Holdout | Predicted constant | MAE | RMSE | Bias |
-|---|---:|---:|---:|---:|
-| PPP_WTG12 | -2.744 | 0.354 | 0.601 | -0.316 |
-| PPP_WTG13 | -6.348 | 0.997 | 1.374 | +0.265 |
-| PPP_WTG14 | -1.711 | 0.207 | 0.263 | +0.051 |
-
-**Macro MAE: 0.519°**, versus 2.647° for the prior residual-Ridge model.
-The summary notebook recomputes the winner from cached daily B0 estimates.
-
-## 7. Robustness
-
-- MAE-optimal constant oracle: **0.462° macro MAE**. It uses the holdout's own
-  target **median**, so it is a non-deployable diagnostic, not a target-mean baseline.
-- Shared 28-day block bootstrap, 500 replicates, seed 42: macro median **0.678°**,
-  mean **0.738°**, central 95% robustness range **[0.448°, 1.470°]**.
-- Blocks resample cached daily B0 estimates and targets; vane medians,
-  calibration and errors are recomputed. Raw SCADA and rolling B0 fits are
-  **not** refitted in each replicate. Overlapping windows remain dependent.
-- These are sampling-robustness intervals, not formal confidence intervals or
-  calibrated bounds on unseen-site prediction error.
-
-## 8. Domain shift and context
-
-Original notebook cells 39–41 use layout-only directional exposure. PPP train
-means are 0.274/0.332/0.280. PPP_WTG17 is 0.382, with a 0.674 profile correlation
-to WTG12. SSS_WTG06 is 0.529; correlations with PPP train are
--0.217/-0.174/-0.180. PPP17 has moderate shift; SSS06 is the riskier transfer.
-
-Geometry-matched calibration worsened all folds (0.533° vs 0.519°); geometry
-therefore remains a risk diagnostic, not a model input or correction.
-
-SSS theta_star: WTG04 +1.432°, WTG05 -1.553°, WTG06 -1.511°, WTG07 +1.388°,
-WTG16 -0.620°. SSS06 differs from the context median by -1.896°, with robustness
-range [-3.869°, 0.544°]; it is not a clearly established site-relative outlier.
-PPP and SSS context medians are -1.526° and +0.384°. Their +1.910° shift is
-**not** used for yaw calibration: context normalization failed validation.
-
-## 9. Rejected and superseded methods
-
-| Method | Macro MAE (deg) | Evidence/status |
-|---|---:|---|
-| Daily Ridge | 2.933 | Root `baseline_loto_scores.csv`; legacy |
-| Tuned RF | 2.783 | `experiments/ensemble/rf_tuned_loto_scores.csv`; development-selected configuration |
-| B0 raw argmax / quadratic | 3.669 / 2.644 | 97.2% / 77.3% coverage; unequal subsets |
-| B1 sequential cubic / argmax | 4.118 | Worse than B0 also on common dates |
-| B2a joint cubic/log-yaw | 2.902 | 63.5% coverage; rejected, not a comparable full-coverage gain |
-| Physics v2 | 2.829 | Frozen daily physics; superseded |
-| Physics + residual Ridge | 2.647 | Previous strongest reference |
-| Enhanced residual | 2.642 | Only 0.005° gain, not meaningful |
-| TV denoising | 2.826 | Negligible improvement over physics |
-| Level + full dynamics / selected dynamics | 0.930 / 0.580 | Worse than constant winner |
-| Geometry-matched reference | 0.533 | Every fold worsened |
-| Context-normalized block reference | 2.142 | Strong degradation |
-| Generic ML power surface | 8.363 | Plateau/boundary instability in argmax |
-
-GP/paper-inspired notebooks were abandoned for low hackathon return; no winning
-GP metric is asserted. RF direct blends also failed to improve residual Ridge.
-The archived v3 ~2.524° result reused a deployment physics choice selected on all
-three turbines in later calibration, so it is **not comparable strict evidence**.
-Older README/audit claims that residual Ridge is the current winner are superseded
-by later executed `TrainValidation` cells, not competing final results.
-
-Predictive power accuracy does not imply identifiability of the power-optimal
-yaw angle. There is no validated improvement over the frozen final mapping
-from the additional methods tested here.
-
-## 10. Final target predictions
-
-| Target | theta_star | Frozen export | Bootstrap mean | Std | 95% robustness range |
-|---|---:|---:|---:|---:|---|
-| PPP_WTG17 | -2.484 | **-3.596°** | -3.578 | 0.375 | [-4.527, -2.996] |
-| SSS_WTG06 | -1.511 | **-4.568°** | -4.438 | 1.365 | [-6.644, -2.280] |
-
-The unrounded full-data calculations are -3.5955834011° and -4.5679000871°.
-Exports preserve the explicitly frozen three-decimal predictions, formatted
-with six decimals. No bootstrap median replaces them. Target robustness uses
-1,000 replicates with target blocks and independently sampled training blocks,
-matching original cell 51. Each submission contains all 731 dates and cluster 0.
-Schema matches the existing project submissions; no official separate sample
-file was found, so prior submissions and challenge date metadata are the references.
-
-## 11. Limitations
-
-Only three labelled turbines from one site support calibration. Formula discovery
-and repeated model comparisons used that same development set. C is not fully
-stable across years. Constant predictions cannot follow actual yaw interventions.
-Geometry diagnostics are simplified exposure proxies, not validated wake physics.
-Cross-site transfer to SSS is the principal unresolved uncertainty. Obtain new
-labelled-site evidence before changing the frozen winner.
-
-## 12. Reproduction
-
-Run inside `github_release/` (or the root of its standalone GitHub repository):
-
-```bash
-python -m pip install -r requirements.txt
-python -m unittest discover -s tests
-python -m nbconvert --to notebook --execute --inplace YawMisalignment_Final_Summary.ipynb
-python src/make_final_submission_vane_level.py
-```
-
-The notebook writes no experiment CSV/JSON/figure files. Its plots and tables are
-embedded, and its default execution uses the derived cache. It recomputes final
-LOTO, sign selection and bootstrap results; historical model scores are documented
-executed evidence, not expensive reruns. Optional verification using separately
-obtained cleaned SCADA:
-
-```bash
-python src/make_final_submission_vane_level.py --verify-scada /path/to/turbines_data.zip
-```
-
-The copied B0 implementation changes only its import-root path for the `src/`
-layout; estimator calculations are unchanged. Original files remain in place.
-
-## 13. Exact release dependencies and provenance
-
-- `src/baseline_openoa_power_vane_updated.py`: frozen B0 implementation.
-- `src/baseline_loto_ridge.py`: existing reading, filtering and wrapping helpers.
-- `src/make_final_submission_vane_level.py`: final calibration, LOTO, bootstrap,
-  optional B0 regeneration and checked submission export.
-- `data/vane_daily.csv`: 3,615 derived rows (239 KB), five turbines, only dates,
-  target labels and B0 angle estimates. Required to reproduce final validation
-  and robustness without distributing private SCADA.
-- `data/turbine_locations_PPP.csv`, `data/turbine_locations_SSS.csv`: layout plots.
-- `requirements.txt`, `tests/test_final_method.py`, the final notebook and docs.
-- `slides/final.pptx` and the two CSVs in `submissions/`: final presentation/export.
-
-Derived training rows come from `experiments/power_vane/b0_21d_updated_predictions.csv`;
-target rows come from `_archive/outputs/hackathon_fasttrack/test_b0_predictions.csv`.
-Their target medians/counts match the later final notebook exactly; sampled
-SCADA windows were also checked. The old cache's later temporal processing is
-not used: only its original frozen 21-day B0 columns are extracted.
-
-Original historical notebooks, experiments, slides and data are retained locally
-but are not release dependencies. The final slide copy updates the latest
-`yaw_misalignment_physics_vane_calibration_update.pptx` narrative.
-
-SHA256 evidence at consolidation:
+The overall modelling problem is:
 
 ```text
-TrainValidation.ipynb
-25e71cf5ca2fc2980e63f5da215e2f07a46b787d2d3af90a74968ebfad4494e8
-b0_21d_updated_predictions.csv
-102d3d176ec9eb25b6869c50e27a640d32ddbfa3ba69ec00323de27f0e535987
-archived test_b0_predictions.csv
-ab65da9b4de38088f5d3d068085f5d4fd1ef9ead1d9a30808f81619e65f60db2
-release data/vane_daily.csv
-9d10383e1ae305d057b799fb139830e7ac4fa7ed124f6f97a72de4226e06e14a
+two-year SCADA structure
+        +
+three labeled turbines
+        ↓
+transferable calibration + label-free state estimator
+        ↓
+previously unseen turbine
 ```
+
+---
+
+# 2. Modelling principles
+
+The final model is built around five principles.
+
+### 2.1 Separate absolute calibration from temporal state estimation
+
+A single long-term yaw value is too restrictive when the turbine changes state over time.
+
+The problem is therefore decomposed into:
+
+```text
+absolute yaw prior
+        +
+persistent relative state correction
+        ↓
+daily yaw trajectory
+```
+
+### 2.2 Use physical observables before adding model complexity
+
+The absolute prior comes from a power-vs-vane aerodynamic reference extracted from SCADA.
+
+The dynamic channel comes from relative nacelle-heading structure across turbines.
+
+### 2.3 Treat the wind farm as a local measurement field
+
+Neighbouring turbines are not used as direct target-yaw regressors.
+
+Instead, pairwise measurements are used to construct a robust local reference field, with pair reliability determined by data quality and spatial context.
+
+### 2.4 Restrict model selection to development turbines
+
+Sensitivity analysis, detector design, pair weighting, and amplitude blending are developed only using the labeled training turbines under strict turbine-level leave-one-out validation.
+
+### 2.5 Keep public validation blind
+
+Public-target metrics are used only for final evaluation and post-hoc error diagnosis.
+
+They are not used to tune state boundaries, amplitude parameters, or absolute intercepts.
+
+---
+
+# 3. Stage I — Independent constant physics model
+
+The first model was designed as a transferable turbine-level calibration model rather than a daily supervised regressor.
+
+## 3.1 Physics feature from SCADA
+
+For each turbine, the two-year SCADA history is used to estimate an apparent power-optimal vane angle.
+
+The main derived variable is:
+
+```text
+gamma = wrap(WindDir - NacDir)
+```
+
+`gamma` is **not** assumed to be the true yaw-misalignment label because the nacelle / vane reference itself may be biased.
+
+For each centered 21-day window:
+
+- keep `WindSpeed` between 3 and 13;
+- require positive `Power`, `RotSpeed`, and `GenSpeed`;
+- remove the top 2% of `Power`;
+- remove the top 5% of `PitchAngle`;
+- normalize `Power` within 1.0-unit `WindSpeed` bins;
+- restrict `gamma` to ±30°;
+- use 1° angle bins;
+- require at least 20 samples per angle bin;
+- require at least 8 valid angle bins;
+- select the observed median `gamma` in the bin with the highest median normalized `Power`.
+
+This gives a rolling apparent optimum:
+
+```text
+theta_t
+```
+
+The long-term turbine feature is:
+
+```text
+theta_star = median(theta_t over valid windows)
+```
+
+Because this feature uses only SCADA, it can also be computed for unlabeled turbines.
+
+---
+
+## 3.2 Shared absolute calibration
+
+For each labeled turbine, the two-year yaw labels are summarized to a long-term target level and linked to the SCADA-derived `theta_star`.
+
+The fitted physical relationship is:
+
+```text
+yaw_level = C - theta_star
+```
+
+The original calibration values were:
+
+| Turbine | `theta_star` | Mean yaw target | Implied `C` |
+|---|---:|---:|---:|
+| `PPP_WTG12` | -3.441° | -2.428° | -5.868° |
+| `PPP_WTG13` | +0.357° | -6.613° | -6.256° |
+| `PPP_WTG14` | -4.351° | -1.762° | -6.114° |
+
+The original shared calibration constant was:
+
+```text
+C_FINAL = -6.0793162066°
+```
+
+
+This exact value belongs to the historical Stage-I constant model. It is not the later current-reference estimate reported in Section 6.
+and the resulting model was:
+
+```text
+predicted_yaw = C_FINAL - theta_star
+```
+
+The model is not fitted separately for each target turbine.
+
+The same shared calibration is transferred to unseen turbines after extracting their own `theta_star`.
+
+---
+
+## 3.3 Strict turbine-level validation of the constant model
+
+For each leave-one-turbine-out fold:
+
+1. two labeled turbines estimate the shared calibration;
+2. the third turbine's labels are hidden;
+3. the held-out turbine's SCADA is used to estimate `theta_star`;
+4. the shared calibration is transferred to that turbine.
+
+Results:
+
+| Holdout | Prediction | MAE |
+|---|---:|---:|
+| `PPP_WTG12` | -2.744° | 0.354° |
+| `PPP_WTG13` | -6.348° | 0.997° |
+| `PPP_WTG14` | -1.711° | 0.207° |
+| **Macro** | — | **0.519°** |
+
+The internal result appeared strong, but hidden-target evaluation exposed a major limitation.
+
+---
+
+## 3.4 Hidden-target behavior of the constant model
+
+Applying the constant model to unseen targets gave:
+
+- `PPP_WTG17`: `-3.596°`
+- `SSS_WTG06`: `-4.568°`
+
+Because the full two-year history was compressed into one `theta_star`, each target received one constant yaw level for all 731 days.
+
+Leaderboard result:
+
+| Target | RMSE | MAE |
+|---|---:|---:|
+| Public validation — `PPP_WTG17` | 5.28° | 5.25° |
+| Final — `SSS_WTG06` | 3.46° | 3.39° |
+
+This established that the long-term absolute calibration was useful as a **prior**, but insufficient as a complete daily yaw model when persistent yaw states change over time.
+
+---
+
+# 4. Stage II — Team-derived hybrid as a diagnostic experiment
+
+After the constant model underperformed on the public target, it was compared with an independent state-aware T3 model developed by teammate **Daniel**.
+
+Daniel's model supplied:
+
+- temporal state boundaries;
+- relative state amplitudes.
+
+My contribution in this hybrid experiment was only to re-center that trajectory using my independently estimated long-term physics level.
+
+The hybrid reached:
+
+```text
+PPP_WTG17
+RMSE = 1.58°
+MAE  = 1.49°
+ARI  = 1.00
+```
+
+This experiment demonstrated that persistent temporal state structure mattered.
+
+However, it is **not** treated as a standalone result of my independent model.
+
+Its role was diagnostic: it motivated the development of a fully independent relative-heading state estimator.
+
+The current model does **not** consume Daniel's:
+
+- predictions;
+- state labels;
+- state amplitudes;
+- change-point dates.
+
+---
+
+# 5. Stage III — Current independent B0-anchored relative-state model
+
+The current model removes dependence on teammate state predictions and separates the problem into:
+
+1. a low-variance **absolute yaw prior**;
+2. a sparse, label-free **relative-heading state correction**.
+
+The main release notebook is:
+
+[`YawMisalignment_Independent_Model_Release.ipynb`](YawMisalignment_Independent_Model_Release.ipynb)
+
+The model is:
+
+$$
+\hat y_i(d)=B_{0,i}-c_{i,\lambda}^{\mathrm{soft}}(d)
+$$
+
+with
+
+$$
+B_{0,i}=C-\theta_i^*
+$$
+
+and
+
+$$
+c_{i,\lambda}(d)
+=
+c_{i,\mathrm{stable}}(d)
++
+\lambda
+\left[
+c_{i,\mathrm{full}}(d)-c_{i,\mathrm{stable}}(d)
+\right].
+$$
+
+The retained candidate uses:
+
+```text
+lambda = 0.75
+beta   = 1.0
+soft pair spread scale = 2.5°
+```
+
+The constant prior is the default.
+
+The prediction moves away from that prior only when SCADA provides sufficiently strong evidence of a persistent state change.
+
+---
+
+# 6. Absolute prior in the current model
+
+The rolling power-vs-vane argmax estimator is retained.
+
+For turbine `i`:
+
+```text
+theta_star_i = median(valid rolling theta_hat_argmax_i(t))
+```
+
+The labeled training turbines estimate one shared calibration:
+
+```text
+C = mean_i(mean_yaw_i + theta_star_i)
+```
+
+and therefore:
+
+```text
+B0_i = C - theta_star_i
+```
+
+In the current reference run:
+
+```text
+C ≈ -6.085°
+beta = 1.000
+```
+
+This is a later current-reference estimate and should not be conflated with the historical `C_FINAL` above.
+
+The physical slope prior is fixed rather than fitting a more complex amplitude relationship from a very small number of labeled state transitions.
+
+This keeps the absolute channel low variance.
+
+---
+
+# 7. Farm-level relative-heading state estimator
+
+The dynamic channel uses only SCADA and same-site turbine context.
+
+For target turbine `i` and neighbour `j`, the pipeline:
+
+1. forms circular nacelle-heading differences;
+2. removes pair-specific and wind-sector-specific baselines;
+3. estimates pair reliability from:
+   - coverage;
+   - residual MAD;
+   - distance;
+4. robustly aggregates usable pair residuals into a daily target-relative heading signal;
+5. constructs a neighbour-only background residual to detect common-mode motion.
+
+This implements a **farm-level background-field idea**:
+
+```text
+target-relative pair evidence
+        -
+local common-mode field
+        ↓
+target-specific relative heading state
+```
+
+Neighbouring turbines are therefore treated as distributed local references rather than as direct predictors of target yaw.
+
+The neighbour contribution is reliability-weighted rather than fixed.
+
+---
+
+# 8. Persistent-state detection
+
+Two complementary state detectors operate on the cleaned relative-heading signal:
+
+- a persistent rolling before/after detector;
+- a conservative L2 segmentation for long two-sided regimes.
+
+Candidate state changes are rejected when they are better explained by:
+
+- sensor / encoder-like jumps;
+- sensor-shadow exclusion windows;
+- local background or common-mode motion;
+- insufficient pair agreement;
+- same-site synchronous events;
+- weak event confidence.
+
+The sensor-shadow veto is applied across detector sources so that a segmentation method cannot reintroduce an encoder-like event already rejected by another detector.
+
+Only surviving high-confidence events can create a dynamic correction.
+
+The detector is explicitly allowed to return:
+
+```text
+no dynamic correction
+```
+
+when the evidence is weak.
+
+---
+
+# 9. State construction and amplitude correction
+
+The dynamic model is intentionally sparse.
+
+It does not integrate every detected local increment indefinitely.
+
+Instead, persistent states are anchored to relative-heading levels.
+
+Two state-amplitude constructions are used:
+
+### Stable correction
+
+The stable correction uses label-free event-confidence shrinkage.
+
+This reduces sensitivity to noisy state estimates but can suppress the true state amplitude.
+
+### Full correction
+
+The full correction removes that amplitude shrinkage while keeping the **same accepted state boundaries**.
+
+### Partial-amplitude blend
+
+The retained candidate interpolates the two:
+
+$$
+c_{i,\lambda}
+=
+c_{i,\mathrm{stable}}
++
+\lambda
+(c_{i,\mathrm{full}}-c_{i,\mathrm{stable}})
+$$
+
+with:
+
+```text
+lambda = 0.75
+```
+
+State-level soft weighting reduces the influence of days with large cross-pair disagreement.
+
+It does not:
+
+- create new boundaries;
+- move accepted boundaries;
+- change the absolute `B0` anchor.
+
+---
+
+# 10. Strict development-turbine LOTO validation
+
+The fixed-boundary interaction audit gives the following strict turbine-level LOTO result for the retained:
+
+```text
+soft_2.5deg + lambda=0.75
+```
+
+candidate.
+
+| Holdout | Current candidate MAE | Constant MAE | Current candidate RMSE | Constant RMSE |
+|---|---:|---:|---:|---:|
+| `PPP_WTG12` | **0.357°** | 0.357° | **0.608°** | 0.608° |
+| `PPP_WTG13` | **0.510°** | 1.004° | **0.702°** | 1.387° |
+| `PPP_WTG14` | **0.206°** | 0.206° | **0.262°** | 0.262° |
+| **Macro** | **0.358°** | **0.522°** | **0.524°** | **0.752°** |
+
+Relative to the constant prior:
+
+```text
+macro MAE  ↓ ~31%
+macro RMSE ↓ ~30%
+```
+
+The structural behavior is more important than the aggregate score:
+
+- `PPP_WTG12`: no accepted dynamic boundary → constant prior;
+- `PPP_WTG13`: two accepted persistent boundaries → dynamic correction;
+- `PPP_WTG14`: no accepted dynamic boundary → constant prior.
+
+In the reference run, the accepted `PPP_WTG13` boundaries were:
+
+- `2023-02-19`
+- `2023-07-27`
+
+This is the intended behavior:
+
+> **Know when to move, and know when not to move.**
+
+Older micro-step boundary-recall diagnostics are not used for model selection because they do not represent the persistent macro-state objective of the current detector.
+
+---
+
+# 11. Unlabeled-target diagnostics
+
+After fitting the final calibration on all three labeled turbines, the same model can be applied to unlabeled targets.
+
+These target outputs are **deployment diagnostics, not local validation scores**, because the target labels are unavailable locally.
+
+Reference diagnostics for the earlier stable all-days stage:
+
+| Target | Accepted boundaries | Correction range | Prediction range |
+|---|---|---:|---:|
+| `PPP_WTG17` | 2023-06-25, 2023-10-15, 2024-01-07 | 5.258° | -6.680° to -1.422° |
+| `SSS_WTG06` | 2023-05-28, 2023-09-24, 2024-10-13 | 4.434° | -8.162° to -3.729° |
+
+The larger correction ranges relative to the labeled development turbines are treated as a **generalization risk**, not as evidence of better performance.
+
+---
+
+# 12. Public held-out validation
+
+The externally reported public-validation results were:
+
+| Model stage | RMSE | MAE | SHAPE | BIAS | ARI |
+|---|---:|---:|---:|---:|---:|
+| Stability-filtered RRS | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
+| Amplitude-corrected RRS (`lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
+
+The important result is not only the lower RMSE.
+
+The state segmentation is unchanged and:
+
+```text
+ARI = 1.00
+```
+
+in both cases.
+
+The dominant improvement is therefore:
+
+```text
+SHAPE: 2.26° → 0.99°
+```
+
+while state structure remains correct.
+
+This supports the development-stage diagnosis that confidence shrinkage was suppressing true state amplitude.
+
+---
+
+# 13. Error decomposition
+
+The remaining held-out error is approximately decomposable as:
+
+$$
+\mathrm{RMSE}
+\approx
+\sqrt{\mathrm{SHAPE}^2+\mathrm{BIAS}^2}
+$$
+
+and numerically:
+
+$$
+\sqrt{0.99^2+1.05^2}\approx1.44^\circ.
+$$
+
+This gives a useful diagnostic separation:
+
+```text
+residual trajectory-shape error ≈ 0.99°
+absolute-level bias            ≈ -1.05°
+```
+
+The dominant unresolved problem is therefore now the **absolute anchor**, rather than state segmentation.
+
+The diagnostic intercept shift implied by the public bias is **not** applied to the model.
+
+Doing so would use held-out leaderboard feedback as a calibration label.
+
+---
+
+# 14. Frozen-model protocol after public validation
+
+The dynamic estimator is treated as frozen:
+
+```text
+fixed sector baseline
++
+frozen accepted boundaries
++
+soft pair-quality weighting
++
+lambda = 0.75
++
+beta = 1
+```
+
+Further model development is restricted to the absolute-anchor term:
+
+$$
+B0=C-\theta^*
+$$
+
+Any new absolute-anchor method should:
+
+1. be developed only on the labeled development turbines;
+2. preferably have physical or independently measurable justification;
+3. not use the public target's `-1.05°` bias to select parameters;
+4. be evaluated later as a new blind hypothesis.
+
+This preserves the independence of the public validation result.
+
+---
+
+# 15. Model-selection and sensitivity audit
+
+Several alternatives were evaluated before freezing the retained candidate.
+
+| Candidate | Finding | Decision |
+|---|---|---|
+| Constant prior | Very stable, but cannot represent persistent state changes. | Retained as fallback baseline. |
+| Multiscale state / sign veto | Did not provide a consistent strict-LOTO gain and added complexity. | Not used in final prediction path. |
+| De-stepped PELT / local-increment accumulation | Exposed nonstationary transitions, but could amplify noise and accumulate level error. | Diagnostic only. |
+| Power-guided Ridge/ML | Power changes were not sufficiently identifiable for reliable dynamic amplitude calibration. | Diagnostic only. |
+| Dynamic pair baselines | Could absorb meaningful state structure and did not add stable evidence. | Not retained. |
+| Soft pair-quality weighting | Improved robustness to disagreement without changing boundaries or absolute center. | Retained. |
+| Partial amplitude restoration | Corrected confidence shrinkage while preserving state segmentation. | Retained with `lambda=0.75`. |
+
+---
+
+## 15.1 Why multiscale detection was tested
+
+The motivation was that dynamic changes can occur over different characteristic time scales.
+
+Weather, operating-state changes, sensor transitions, and other disturbances do not necessarily share one fixed window length.
+
+A multiscale formulation was therefore tested to avoid assuming that all relevant state changes should appear at one temporal scale.
+
+However, strict development-turbine evaluation did not show a consistent improvement over the simpler rolling / segmentation formulation.
+
+The multiscale idea was therefore rejected from the production path rather than retained for complexity alone.
+
+---
+
+## 15.2 Why PELT was not used as the full state model
+
+PELT-type segmentation was useful for exposing nonstationary periods and long regime changes.
+
+However, direct accumulation of local increments can:
+
+- amplify noisy local steps;
+- accumulate level error;
+- convert uncertain local changes into a drifting global trajectory.
+
+PELT therefore remains a useful diagnostic / complementary detector, but not the sole amplitude-construction mechanism.
+
+---
+
+## 15.3 Why Power-guided ML was not retained
+
+Power was investigated as a possible signal for dynamic state amplitude.
+
+The difficulty was identifiability:
+
+```text
+Power variation
+=
+yaw effect
++
+wind variation
++
+operating-state variation
++
+control effects
++
+other environmental effects
+```
+
+The available development data did not support a sufficiently reliable decomposition for dynamic amplitude calibration.
+
+Power-based Ridge / ML experiments were therefore kept as diagnostics rather than added to the final estimator.
+
+---
+
+# 16. Why the final model remains deliberately small
+
+The retained prediction path contains only components with a demonstrated role:
+
+```text
+fixed wind-sector baselines
+        ↓
+relative-heading pair residuals
+        ↓
+reliability-weighted farm context
+        ↓
+persistent state detector
+        ↓
+soft state-level weighting
+        ↓
+partial amplitude restoration
+        +
+absolute B0 prior
+```
+
+The modelling rule is:
+
+> **Additional complexity is introduced only when a simpler observable fails for a demonstrated reason and the replacement survives strict turbine-level validation.**
+
+---
+
+# 17. Model progression and ownership
+
+The project evolved through three main modelling stages:
+
+| Stage | Absolute yaw level | Temporal state boundaries | Relative state amplitudes |
+|---|---|---|---|
+| Original independent constant model | Independent `B0` calibration | None | None |
+| Team hybrid with Daniel | Independent `B0` calibration | Daniel | Daniel |
+| Current independent B0-anchored RRS | Independent `B0` calibration | Label-free SCADA detector | Soft pair-quality relative-heading correction with partial amplitude |
+
+The hybrid is a **team-derived historical comparison**.
+
+The current independent model does not consume Daniel's:
+
+- predictions;
+- state labels;
+- change-point dates;
+- amplitude estimates.
+
+This distinction is intentionally retained in the repository.
+
+---
+
+# 18. Submission history
+
+The validation-submission history is summarized below. Filenames are preserved as repository artifacts; organizer-side submissions may follow a separate immutable workflow.
+
+| Entry | Submission | Model / note |
+|---|---|---|
+| #20 | Results_33_T3_4.csv | Latest Stability-filtered RRS: frozen label-free boundaries, soft pair-quality weighting with a 2.5° scale, partial amplitude lambda=0.75, B0_i=C-theta_star_i, and fixed beta=1. Contains all 731 PPP_WTG17 dates; no target labels were used. Strict LOTO reference: MAE 0.358°, RMSE 0.524°. |
+| Previous RRS update | Results_33_T3_3.csv | Stability-filtered RRS validation submission. Strict LOTO reference: MAE 0.362°, RMSE 0.610°. |
+| #14 | Results_33_T3_2.csv | Independent same-site relative-power-efficiency state model. Strict nested turbine-level LOTO: macro MAE 0.420°, RMSE 0.564°; 731 PPP_WTG17 rows and two predicted clusters. |
+| #13 | Results_33_T3_1.csv | Team-derived state-aware hybrid: my physics-based long-term level plus Daniel's piecewise state residual. The previously merged final submission was left unchanged. |
+| #12 | Results_33_T3_0.csv | Initial independent constant-line physics submission. Results_33_T3_final.csv was also created for the final target and was later removed by request from the organizer repository. |
+
+---
+
+# 19. Main modelling lessons
+
+The project produced several broader conclusions.
+
+1. Strong internal LOTO performance can still underestimate hidden-target domain shift.
+2. Absolute yaw calibration and temporal state detection are distinct estimation problems.
+3. A simple long-term aerodynamic estimator can remain valuable as a low-variance **prior** even after it fails as a complete model.
+4. Neighbouring turbines are more useful as a robust local reference field than as direct target-yaw regressors.
+5. Persistent relative-heading structure can recover useful state information without target labels.
+6. Sensor / encoder re-references can mimic physical yaw-state changes and require explicit veto logic.
+7. A good state detector must be allowed to return **no correction**.
+8. Confidence weighting can improve robustness while simultaneously shrinking amplitude too strongly.
+9. Sensitivity analysis is more useful than adding complexity without validation evidence.
+10. A failed modelling hypothesis can still be informative if it isolates which part of the problem is not identifiable.
+11. Public validation should remain a test, not silently become an additional training label.
+12. Contribution boundaries should remain explicit when team-derived diagnostics influence later independent modelling.
+
+---
+
+# 20. Data availability and reproducibility
+
+Challenge SCADA data are intentionally not included in this public repository.
+
+The repository does not publish:
+
+- raw SCADA;
+- challenge archives;
+- parquet challenge files;
+- local derived caches that may inherit challenge-data restrictions.
+
+Data access must be requested separately through WeDoWind / the challenge organizers.
+
+Because the source SCADA are restricted, a clean clone cannot reproduce all numerical experiments from raw data.
+
+Executed notebooks are included so that:
+
+- modelling history;
+- recorded outputs;
+- diagnostics;
+- method progression
+
+can still be inspected.
+
+---
+
+# 21. CI strategy
+
+CI validates code-level behavior without redistributing challenge data.
+
+The test suite is intended to cover data-independent components such as:
+
+- model utilities;
+- circular-angle handling;
+- deterministic calculations;
+- import / execution behavior;
+- regression behavior of code paths that do not require restricted SCADA.
+
+Data-dependent tests are skipped when the local challenge cache is unavailable.
+
+Run the test suite with:
+
+```bash
+python -m unittest discover -s tests
+```
+
+---
+
+# 22. Environment
+
+Python 3.11 is recommended.
+
+```bash
+conda create -n yaw-baseline python=3.11 -y
+conda activate yaw-baseline
+pip install -r requirements.txt
+```
+
+---
+
+# 23. Main implementation files
+
+```text
+README.md
+FINAL_METHOD_SUMMARY.md
+YawMisalignment_Independent_Model_Release.ipynb
+requirements.txt
+
+src/
+├── baseline_loto_ridge.py
+├── baseline_openoa_power_vane_updated.py
+├── fleet_context.py
+├── yaw_relative_state.py
+├── yaw_model.py
+├── yaw_self_response.py
+└── make_final_submission_vane_level.py
+
+submissions/
+├── Results_33_T3_0.csv
+├── Results_33_T3_1.csv
+└── Results_33_T3_final.csv
+
+tests/
+└── test_final_method.py
+```
+
+The Daniel-derived notebook is retained as historical provenance, not as a dependency of the current model.
+
+---
+
+# 24. Current research state
+
+The dynamic-state problem is considered sufficiently validated for the current project stage:
+
+```text
+state partition: correct on public validation (ARI = 1)
+shape error:     reduced to ~0.99°
+```
+
+The main unresolved research question is now:
+
+> **How can the absolute yaw anchor be transferred more reliably to an unseen turbine without using held-out target feedback?**
+
+This is deliberately treated as a separate calibration problem rather than as a reason to reopen every component of the dynamic-state estimator.
+
+---
+
+## Summary
+
+The final model is best understood as a **physics-informed relative-state estimator with a low-variance absolute prior**.
+
+Its development path is:
+
+```text
+constant physical prior
+        ↓
+hidden-target failure diagnosis
+        ↓
+temporal-state hypothesis
+        ↓
+independent cross-turbine relative-heading model
+        ↓
+strict LOTO sensitivity analysis
+        ↓
+confidence-shrinkage diagnosis
+        ↓
+partial amplitude restoration
+        ↓
+blind validation
+        ↓
+absolute-anchor problem isolated
+```
+
+The project therefore emphasizes not only predictive performance, but also:
+
+- physical interpretability;
+- domain-shift awareness;
+- turbine-level validation;
+- sensitivity analysis;
+- model-selection discipline;
+- explicit contribution ownership;
+- reproducible software practices under restricted-data constraints.
