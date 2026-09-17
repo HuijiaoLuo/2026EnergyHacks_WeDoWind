@@ -48,13 +48,7 @@ $$
 with
 
 $$
-c_{i,\lambda}(d)
-=
-c_{i,\mathrm{stable}}(d)
-+
-\lambda[c_{i,\mathrm{full}}(d)-c_{i,\mathrm{stable}}(d)],
-\qquad
-\lambda=0.75.
+c_{i,\lambda}(d)=c_{i,\mathrm{stable}}(d)+\lambda[c_{i,\mathrm{full}}(d)-c_{i,\mathrm{stable}}(d)],\qquad\lambda=0.75.
 $$
 
 The physical slope is fixed at \($\beta=1$\).

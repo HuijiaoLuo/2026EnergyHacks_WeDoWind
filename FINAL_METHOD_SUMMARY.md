@@ -272,14 +272,7 @@ $$
 and
 
 $$
-c_{i,\lambda}(d)
-=
-c_{i,\mathrm{stable}}(d)
-+
-\lambda
-\left[
-c_{i,\mathrm{full}}(d)-c_{i,\mathrm{stable}}(d)
-\right].
+c_{i,\lambda}(d)=c_{i,\mathrm{stable}}(d)+\lambda\left[c_{i,\mathrm{full}}(d)-c_{i,\mathrm{stable}}(d)\right].
 $$
 
 The retained candidate uses:
