@@ -47,6 +47,17 @@ class RelativeStateConfig:
     pelt_min_change_deg: float = 2.0
     pelt_merge_days: int = 14
 
+    # Optional fixed historical wind-field prior for neighbour reliability.
+    # It is computed once per target-neighbour pair; it is not a time-varying
+    # gate and does not alter the label-free boundary logic.
+    use_overlap_prior: bool = False
+    overlap_min_days: int = 60
+    overlap_floor: float = 0.50
+    use_dynamic_overlap_prior: bool = False
+    dynamic_overlap_window_days: int = 56
+    dynamic_overlap_smooth_days: int = 14
+    dynamic_overlap_min_days: int = 30
+
 
 def _aligned_matrix(
     binned: dict[str, pd.DataFrame],
@@ -66,18 +77,20 @@ def _weighted_row_median(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
     if values.shape[1] == 0:
         return np.full(values.shape[0], np.nan)
 
-    valid = (
-        np.isfinite(values)
-        & np.isfinite(weights)[None, :]
-        & (weights[None, :] > 0)
-    )
+    if np.ndim(weights) == 1:
+        weight_matrix = np.broadcast_to(weights, values.shape)
+    else:
+        weight_matrix = np.asarray(weights, dtype=float)
+        if weight_matrix.shape != values.shape:
+            raise ValueError("Dynamic weight matrix must match values shape")
+
+    valid = np.isfinite(values) & np.isfinite(weight_matrix) & (weight_matrix > 0)
     safe = np.where(valid, values, np.inf)
     order = np.argsort(safe, axis=1)
     sorted_values = np.take_along_axis(safe, order, axis=1)
 
-    row_weights = np.broadcast_to(weights, values.shape)
     sorted_weights = np.take_along_axis(
-        np.where(valid, row_weights, 0.0), order, axis=1
+        np.where(valid, weight_matrix, 0.0), order, axis=1
     )
 
     total = sorted_weights.sum(axis=1)
@@ -157,6 +170,118 @@ def _pair_statistics(
     return coverage, mad, np.where(usable, reliability, 0.0), usable
 
 
+def _spectral_overlap(a: pd.Series, b: pd.Series, min_points: int) -> float:
+    """Similarity of normalized daily fluctuation spectra in [0, 1]."""
+    aligned = pd.concat([a, b], axis=1).dropna()
+    if len(aligned) < min_points:
+        return np.nan
+    x = aligned.iloc[:, 0].to_numpy(dtype=float)
+    y = aligned.iloc[:, 1].to_numpy(dtype=float)
+    x = x - np.mean(x)
+    y = y - np.mean(y)
+    window = np.hanning(len(aligned))
+    px = np.abs(np.fft.rfft(x * window))[1:] ** 2
+    py = np.abs(np.fft.rfft(y * window))[1:] ** 2
+    sx, sy = px.sum(), py.sum()
+    if sx <= 0 or sy <= 0:
+        return np.nan
+    return float(np.minimum(px / sx, py / sy).sum())
+
+
+def _overlap_prior_weights(
+    turbine: str,
+    ids: list[str],
+    binned: dict[str, pd.DataFrame],
+    config: RelativeStateConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return fixed speed, direction and combined overlap priors per pair."""
+    speed = np.full(len(ids), np.nan, dtype=float)
+    direction = np.full(len(ids), np.nan, dtype=float)
+    target = binned[turbine]
+    target_speed = target["WindSpeed"].resample("D").median()
+    target_direction = target["WindDir"].resample("D").median()
+    target_sin = np.sin(np.deg2rad(target_direction))
+    target_cos = np.cos(np.deg2rad(target_direction))
+
+    for j, neighbour in enumerate(ids):
+        other = binned[neighbour]
+        speed_other = other["WindSpeed"].resample("D").median()
+        direction_other = other["WindDir"].resample("D").median()
+        direction_sin = np.sin(np.deg2rad(direction_other))
+        direction_cos = np.cos(np.deg2rad(direction_other))
+        speed[j] = _spectral_overlap(
+            target_speed, speed_other, config.overlap_min_days
+        )
+        values = np.asarray([
+            _spectral_overlap(target_sin, direction_sin, config.overlap_min_days),
+            _spectral_overlap(target_cos, direction_cos, config.overlap_min_days),
+        ], dtype=float)
+        valid = np.isfinite(values)
+        direction[j] = float(values[valid].mean()) if valid.any() else np.nan
+
+    combined = np.zeros(len(ids), dtype=float)
+    for j in range(len(ids)):
+        values = np.asarray([speed[j], direction[j]], dtype=float)
+        valid = np.isfinite(values)
+        combined[j] = float(values[valid].mean()) if valid.any() else 0.0
+    return speed, direction, np.clip(combined, 0.0, 1.0)
+
+
+def _pair_dynamic_overlap(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    full_days: pd.DatetimeIndex,
+    config: RelativeStateConfig,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Estimate a smooth daily wind-field overlap for one pair.
+
+    The window is deliberately long relative to a daily state boundary.  This
+    is a reliability prior, not a boundary signal.  WindDir is compared by
+    cosine of its wrapped circular difference.
+    """
+    ls = left["WindSpeed"].resample("D").median().reindex(full_days)
+    rs = right["WindSpeed"].resample("D").median().reindex(full_days)
+    ld = left["WindDir"].resample("D").median().reindex(full_days)
+    rd = right["WindDir"].resample("D").median().reindex(full_days)
+
+    valid = ls.notna() & rs.notna() & ld.notna() & rd.notna()
+    count = valid.astype(float).rolling(
+        config.dynamic_overlap_window_days,
+        min_periods=config.dynamic_overlap_min_days,
+        center=True,
+    ).sum()
+    coverage = count / max(config.dynamic_overlap_window_days, 1)
+
+    speed_corr = ls.rolling(
+        config.dynamic_overlap_window_days,
+        min_periods=config.dynamic_overlap_min_days,
+        center=True,
+    ).corr(rs)
+    speed_similarity = speed_corr.clip(lower=0.0, upper=1.0)
+
+    direction_cos = np.cos(
+        np.deg2rad(wrap_180(ld.to_numpy(dtype=float) - rd.to_numpy(dtype=float)))
+    )
+    direction_similarity = pd.Series(
+        direction_cos, index=full_days
+    ).rolling(
+        config.dynamic_overlap_window_days,
+        min_periods=config.dynamic_overlap_min_days,
+        center=True,
+    ).mean().add(1.0).div(2.0).clip(0.0, 1.0)
+
+    combined = pd.concat(
+        [speed_similarity, direction_similarity], axis=1
+    ).mean(axis=1, skipna=True)
+    combined = (combined * coverage).clip(0.0, 1.0)
+    combined = combined.rolling(
+        config.dynamic_overlap_smooth_days,
+        min_periods=1,
+        center=True,
+    ).median()
+    return speed_similarity, direction_similarity, combined
+
+
 def _daily_pair_matrix(
     residual: np.ndarray,
     index: pd.DatetimeIndex,
@@ -223,19 +348,58 @@ def fleet_relative_series(
         rel_config,
     )
 
+    overlap_speed = np.full(len(ids), np.nan, dtype=float)
+    overlap_direction = np.full(len(ids), np.nan, dtype=float)
+    overlap_combined = np.ones(len(ids), dtype=float)
+    if rel_config.use_overlap_prior:
+        overlap_speed, overlap_direction, overlap_combined = _overlap_prior_weights(
+            turbine, ids, binned, rel_config
+        )
+        overlap_factor = rel_config.overlap_floor + (
+            1.0 - rel_config.overlap_floor
+        ) * overlap_combined
+        reliability = reliability * overlap_factor
+        usable &= reliability >= rel_config.min_pair_weight
+
     e_target[:, ~usable] = np.nan
     pair_daily = _daily_pair_matrix(
         e_target, idx, ids, full_days
     )
+    target_dynamic_factor = np.ones((len(full_days), len(ids)), dtype=float)
+    if rel_config.use_dynamic_overlap_prior:
+        dynamic_rows = []
+        for neighbour in ids:
+            _, _, overlap = _pair_dynamic_overlap(
+                binned[turbine], binned[neighbour], full_days, rel_config
+            )
+            dynamic_rows.append(overlap.to_numpy(dtype=float))
+        dynamic_overlap = np.column_stack(dynamic_rows)
+        dynamic_overlap[~np.isfinite(dynamic_overlap)] = 0.0
+        target_dynamic_factor = rel_config.overlap_floor + (
+            1.0 - rel_config.overlap_floor
+        ) * dynamic_overlap
+        target_dynamic_factor[:, ~usable] = 0.0
+    else:
+        target_dynamic_factor[:, ~usable] = 0.0
     relative_daily = _weighted_row_median(
         pair_daily.to_numpy(dtype=float),
-        reliability,
+        reliability[None, :] * target_dynamic_factor,
     )
 
     diagnostics = candidates.copy()
     diagnostics["coverage"] = coverage
     diagnostics["pair_mad"] = pair_mad
     diagnostics["reliability_weight"] = reliability
+    diagnostics["speed_overlap"] = overlap_speed
+    diagnostics["direction_overlap"] = overlap_direction
+    diagnostics["overlap_prior"] = overlap_combined
+    dynamic_median = np.zeros(len(ids), dtype=float)
+    for j in range(len(ids)):
+        values = target_dynamic_factor[:, j]
+        values = values[np.isfinite(values) & (values > 0)]
+        if len(values):
+            dynamic_median[j] = float(np.median(values))
+    diagnostics["dynamic_overlap_median"] = dynamic_median
     diagnostics["usable"] = usable
 
     background_daily = np.full(len(full_days), np.nan)
@@ -275,9 +439,30 @@ def fleet_relative_series(
             list(range(len(ia))),
             full_days,
         )
+        background_dynamic_factor = np.ones(
+            (len(full_days), len(ia)), dtype=float
+        )
+        if rel_config.use_dynamic_overlap_prior:
+            bg_rows = []
+            for left_idx, right_idx in zip(ia, ib):
+                _, _, overlap = _pair_dynamic_overlap(
+                    binned[ids[left_idx]],
+                    binned[ids[right_idx]],
+                    full_days,
+                    rel_config,
+                )
+                bg_rows.append(overlap.to_numpy(dtype=float))
+            bg_overlap = np.column_stack(bg_rows)
+            bg_overlap[~np.isfinite(bg_overlap)] = 0.0
+            background_dynamic_factor = rel_config.overlap_floor + (
+                1.0 - rel_config.overlap_floor
+            ) * bg_overlap
+            background_dynamic_factor[:, ~bg_usable] = 0.0
+        else:
+            background_dynamic_factor[:, ~bg_usable] = 0.0
         background_daily = _weighted_row_median(
             background_pairs.to_numpy(dtype=float),
-            bg_weight,
+            bg_weight[None, :] * background_dynamic_factor,
         )
 
     daily = pd.DataFrame({
@@ -805,6 +990,32 @@ def _merge_boundary_tables(
     if "source" not in out.columns:
         out["source"] = "rolling"
 
+    # Rolling and PELT can emit the same calendar date.  Keep one scalar row
+    # per normalized date before using ``.at`` below; otherwise ``.at[date]``
+    # returns a Series and duplicate candidates can crash the merge.  Sensor
+    # rows take precedence, then accepted candidates with stronger evidence.
+    out = out.copy()
+    out["_boundary_date"] = pd.to_datetime(out.index).normalize()
+    sensor_priority = out["reason"].isin(
+        ["sensor", "sensor_shadow"]
+    ).astype(int)
+    accepted_priority = out["accepted"].fillna(False).astype(int)
+    out["_merge_priority"] = (
+        2 * sensor_priority
+        + accepted_priority
+    )
+    out = (
+        out.sort_values(
+            ["_boundary_date", "_merge_priority", "event_confidence", "z"],
+            ascending=[True, False, False, False],
+            na_position="last",
+            kind="stable",
+        )
+        .drop_duplicates("_boundary_date", keep="first")
+        .set_index("_boundary_date")
+        .drop(columns=["_merge_priority"])
+    )
+
     # Sensor-shadow veto must apply across detector sources. Any accepted
     # yaw-like candidate from either detector that lies inside the configured
     # sensor exclusion window is rejected before duplicate merging.
@@ -1105,8 +1316,11 @@ def clusters_from_boundaries(
             dtype=int,
         )
 
-    dates = np.sort(
-        accepted.index.to_numpy(
+    # The boundary table can contain repeated candidates for the same
+    # calendar day after merging rolling and PELT proposals.  A repeated
+    # date must not create an artificial two-state jump in a daily series.
+    dates = np.unique(
+        pd.DatetimeIndex(pd.to_datetime(accepted.index)).normalize().to_numpy(
             dtype="datetime64[ns]"
         )
     )
