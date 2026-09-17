@@ -4,6 +4,13 @@
 
 A physics-informed, label-free SCADA workflow for estimating persistent wind-turbine yaw states and transferring the model to unseen turbines.
 
+The retained model is named **Physics-Anchored Relative-State (PARS)**: a turbine-specific physics prior supplies the absolute level, while reliability-weighted cross-turbine heading states supply persistent changes.
+
+## Challenge links
+
+- [Official submission repository](https://github.com/WeDoWind/NADARA-Static-Yaw-Misalignment-Submissions)
+- [Live leaderboard](https://wedowind.github.io/NADARA-Static-Yaw-Misalignment-Submissions/)
+
 ## Highlights
 
 - Built an independent model from two years of SCADA history and three labeled training turbines.
@@ -35,9 +42,9 @@ label-free persistent state correction
 daily yaw trajectory
 ```
 
-## Current independent model
+## Current model: Physics-Anchored Relative-State (PARS)
 
-The retained model is
+PARS is
 
 $$
 \hat y_i(d)=B_{0,i}-c_{i,\lambda}^{\mathrm{soft}}(d),
@@ -169,7 +176,7 @@ The intended behavior is visible in the folds:
 | Model stage | RMSE | MAE | SHAPE | BIAS | ARI |
 |---|---:|---:|---:|---:|---:|
 | Stability-filtered RRS | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
-| Amplitude-corrected RRS (`lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
+| Physics-Anchored Relative-State (PARS, `lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
 
 ARI remains 1.00, so the gain comes primarily from **state-amplitude correction rather than re-segmentation**.
 
@@ -203,11 +210,11 @@ The project evolved through three stages:
 |---|---|---|---|
 | Initial constant model | Independent physics calibration | None | None |
 | Team hybrid | Independent calibration | Teammate state model | Teammate amplitudes |
-| Current independent model | Independent physics calibration | Label-free SCADA detector | Independent relative-heading correction |
+| Physics-Anchored Relative-State (PARS) | Independent physics calibration | Label-free SCADA detector | Reliability-weighted relative-heading correction |
 
 The hybrid was retained only as historical evidence that temporal state structure matters.
 
-The current independent model does **not** consume teammate predictions, state labels, or change-point dates.
+PARS does **not** consume teammate predictions, state labels, or change-point dates.
 
 ## Data, CI, and reproducibility
 

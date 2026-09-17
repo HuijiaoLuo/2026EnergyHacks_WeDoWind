@@ -6,6 +6,8 @@ This document contains the detailed modelling record behind the recruiter-facing
 
 It preserves the full methodological progression, calibration details, strict leave-one-turbine-out validation, model-selection audit, public-target diagnostics, ownership boundaries, and reproducibility notes.
 
+The retained model is named **Physics-Anchored Relative-State (PARS)**. It combines a turbine-specific physics prior for the absolute level with reliability-weighted cross-turbine relative-heading states for persistent changes.
+
 ---
 
 ## 1. Challenge setting
@@ -237,7 +239,7 @@ However, it is **not** treated as a standalone result of my independent model.
 
 Its role was diagnostic: it motivated the development of a fully independent relative-heading state estimator.
 
-The current model does **not** consume Daniel's:
+PARS does **not** consume Daniel's:
 
 - predictions;
 - state labels;
@@ -246,9 +248,9 @@ The current model does **not** consume Daniel's:
 
 ---
 
-# 5. Stage III — Current independent B0-anchored relative-state model
+# 5. Stage III — Physics-Anchored Relative-State (PARS) model
 
-The current model removes dependence on teammate state predictions and separates the problem into:
+PARS removes dependence on teammate state predictions and separates the problem into:
 
 1. a low-variance **absolute yaw prior**;
 2. a sparse, label-free **relative-heading state correction**.
@@ -289,7 +291,7 @@ The prediction moves away from that prior only when SCADA provides sufficiently 
 
 ---
 
-# 6. Absolute prior in the current model
+# 6. Absolute prior in PARS
 
 The rolling power-vs-vane argmax estimator is retained.
 
@@ -498,7 +500,7 @@ The externally reported public-validation results were:
 | Model stage | RMSE | MAE | SHAPE | BIAS | ARI |
 |---|---:|---:|---:|---:|---:|
 | Stability-filtered RRS | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
-| Amplitude-corrected RRS (`lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
+| Physics-Anchored Relative-State (PARS, `lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
 
 The important result is not only the lower RMSE.
 
@@ -656,7 +658,7 @@ Power-based Ridge / ML experiments were therefore kept as diagnostics rather tha
 
 ---
 
-# 16. Why the final model remains deliberately small
+# 16. Why PARS remains deliberately small
 
 The retained prediction path contains only components with a demonstrated role:
 
@@ -690,11 +692,11 @@ The project evolved through three main modelling stages:
 |---|---|---|---|
 | Original independent constant model | Independent `B0` calibration | None | None |
 | Team hybrid with Daniel | Independent `B0` calibration | Daniel | Daniel |
-| Current independent B0-anchored RRS | Independent `B0` calibration | Label-free SCADA detector | Soft pair-quality relative-heading correction with partial amplitude |
+| Physics-Anchored Relative-State (PARS) | Independent `B0` calibration | Label-free SCADA detector | Soft pair-quality relative-heading correction with partial amplitude |
 
 The hybrid is a **team-derived historical comparison**.
 
-The current independent model does not consume Daniel's:
+PARS does not consume Daniel's:
 
 - predictions;
 - state labels;
@@ -824,7 +826,7 @@ tests/
 └── test_final_method.py
 ```
 
-The Daniel-derived notebook is retained as historical provenance, not as a dependency of the current model.
+The Daniel-derived notebook is retained as historical provenance, not as a dependency of PARS.
 
 ---
 
@@ -847,7 +849,7 @@ This is deliberately treated as a separate calibration problem rather than as a 
 
 ## Summary
 
-The final model is best understood as a **physics-informed relative-state estimator with a low-variance absolute prior**.
+PARS is best understood as a **physics-informed relative-state estimator with a low-variance absolute prior**.
 
 Its development path is:
 
