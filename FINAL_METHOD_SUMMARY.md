@@ -694,6 +694,11 @@ The project evolved through three main modelling stages:
 | Team hybrid with Daniel | Independent `B0` calibration | Daniel | Daniel |
 | Physics-Anchored Relative-State (PARS) | Independent `B0` calibration | Label-free SCADA detector | Soft pair-quality relative-heading correction with partial amplitude |
 
+The **FarmAnchor** variant is a post-release absolute-anchor exploration of
+PARS, not a replacement stage. It changes only the shared `C` estimate and
+keeps the PARS state detector, state correction, `lambda=0.75`, and `beta=1`
+fixed.
+
 The hybrid is a **team-derived historical comparison**.
 
 PARS does not consume Daniel's:
@@ -806,6 +811,7 @@ pip install -r requirements.txt
 README.md
 FINAL_METHOD_SUMMARY.md
 YawMisalignment_Independent_Model_Release.ipynb
+YawMisalignment_Independent_Model_FarmAnchor_Exploration.ipynb
 requirements.txt
 
 src/
@@ -814,6 +820,7 @@ src/
 ├── fleet_context.py
 ├── yaw_relative_state.py
 ├── yaw_model.py
+├── yaw_farm_anchor.py
 ├── yaw_self_response.py
 └── make_final_submission_vane_level.py
 
@@ -844,6 +851,47 @@ The main unresolved research question is now:
 > **How can the absolute yaw anchor be transferred more reliably to an unseen turbine without using held-out target feedback?**
 
 This is deliberately treated as a separate calibration problem rather than as a reason to reopen every component of the dynamic-state estimator.
+
+### Farm-anchor exploration
+
+The exploratory notebook `YawMisalignment_Independent_Model_FarmAnchor_Exploration.ipynb`
+tests one isolated change to the absolute calibration. Instead of estimating
+`C` from the release long-run turbine means, it first uses the state-consistent
+daily support
+
+```text
+anchor_i(d) = y_i(d) + c_i(d) + theta_star_i
+```
+
+to form a quality-weighted turbine-level anchor summary `A_i`:
+
+```text
+A_i = RobustCenter_d(anchor_i(d); q_i(d))
+```
+
+A robust Huber centre is then fitted across those turbine summaries:
+
+```text
+C_corrected = HuberCenter_i(A_i)
+B0_i = C_corrected - theta_star_i
+prediction_i(d) = B0_i - c_i(d)
+```
+
+If labelled turbines from the target farm are available, the corresponding farm
+centre is preferred; otherwise the global centre is used. The current PPP
+development set contains only one farm, so the full-fit value
+`C_corrected = -6.155553°` is primarily a robust corrected global/farm-anchor
+estimate, not evidence of cross-farm transfer.
+
+The existing frozen relative-state detector, fixed pair/sector baselines, soft
+pair-quality weighting, `lambda=0.75`, `beta=1`, and global-median
+`theta_star` estimator are unchanged. Power does not directly enter the final
+yaw prediction. Strict development-turbine LOTO improved from
+`0.358° / 0.524°` MAE/RMSE for the release anchor to `0.320° / 0.510°` for the
+corrected anchor. This remains an exploratory anchor variant;
+`YawMisalignment_Independent_Model_Release.ipynb` and the original PARS model
+are preserved as the release reference. No new external leaderboard validation
+has been performed.
 
 ---
 

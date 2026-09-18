@@ -239,8 +239,10 @@ python -m unittest discover -s tests
 README.md
 FINAL_METHOD_SUMMARY.md
 YawMisalignment_Independent_Model_Release.ipynb
+YawMisalignment_Independent_Model_FarmAnchor_Exploration.ipynb
 
 src/
+  yaw_farm_anchor.py
 tests/
 slides/
 submissions/
@@ -261,5 +263,45 @@ farm-level measurement context
 ```
 
 The current model therefore prioritizes **transferability, interpretability, sensitivity analysis, and validation discipline** over additional model complexity.
+
+### Absolute-anchor exploration: FarmAnchor variant
+
+`YawMisalignment_Independent_Model_FarmAnchor_Exploration.ipynb` tests an
+absolute-calibration variant of PARS. It does **not** replace the release
+notebook or the original PARS model.
+
+For each labelled turbine and day, it forms a state-consistent anchor
+observation:
+
+$$
+a_i(d)=y_i(d)+c_{i,0.75}^{\mathrm{soft}}(d)+\theta_i^*.
+$$
+
+The daily observations are reduced to a quality-weighted turbine-level summary:
+
+$$
+A_i=\operatorname{RobustCenter}_d\left(a_i(d);q_i(d)\right).
+$$
+
+A robust Huber centre is then fitted across the turbine summaries. If
+same-farm labelled support exists, the farm centre is used; otherwise the
+global centre is used as a fallback:
+
+$$
+C_{\mathrm{corrected}}=\operatorname{HuberCenter}_i(A_i),
+\qquad
+B_{0,i}=C_{\mathrm{corrected}}-\theta_i^*.
+$$
+
+The current full-fit PPP anchor is `C_corrected = -6.155553°`. Relative-heading
+construction, fixed pair/sector baselines, frozen boundaries, soft pair-quality
+weighting, `lambda=0.75`, `beta=1`, and the global-median `theta_star` estimator
+remain unchanged. Power does not directly enter the final yaw prediction.
+
+Strict development-turbine LOTO improves from **0.358° / 0.524°** MAE/RMSE
+for the release anchor to **0.320° / 0.510°** for this corrected anchor.
+The PPP development set currently contains only one farm, so this is mainly a
+robust corrected global/farm-anchor test, not a validated cross-farm transfer
+result. There is no new external leaderboard validation yet.
 
 Repository: `HuijiaoLuo/2026EnergyHacks_WeDoWind`
