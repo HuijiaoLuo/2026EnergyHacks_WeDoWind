@@ -859,23 +859,27 @@ tests one isolated change to the absolute calibration. Instead of estimating
 `C` from the release long-run turbine means, it first uses the state-consistent
 daily support
 
-```text
-anchor_i(d) = y_i(d) + c_i(d) + theta_star_i
-```
+$$
+a_i(d)=y_i(d)+c_{i,0.75}^{\mathrm{soft}}(d)+\theta_i^*.
+$$
 
 to form a quality-weighted turbine-level anchor summary `A_i`:
 
-```text
-A_i = RobustCenter_d(anchor_i(d); q_i(d))
-```
+$$
+A_i=\mathrm{RobustCenter}_d\left(a_i(d);q_i(d)\right).
+$$
 
 A robust Huber centre is then fitted across those turbine summaries:
 
-```text
-C_corrected = HuberCenter_i(A_i)
-B0_i = C_corrected - theta_star_i
-prediction_i(d) = B0_i - c_i(d)
-```
+$$
+C_{\mathrm{corrected}}=\mathrm{HuberCenter}_i(A_i),
+\qquad
+B_{0,i}=C_{\mathrm{corrected}}-\theta_i^*.
+$$
+
+$$
+\hat y_i(d)=B_{0,i}-c_{i,0.75}^{\mathrm{soft}}(d).
+$$
 
 If labelled turbines from the target farm are available, the corresponding farm
 centre is preferred; otherwise the global centre is used. The current PPP

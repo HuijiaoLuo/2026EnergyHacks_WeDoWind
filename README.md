@@ -280,7 +280,7 @@ $$
 The daily observations are reduced to a quality-weighted turbine-level summary:
 
 $$
-A_i=\operatorname{RobustCenter}_d\left(a_i(d);q_i(d)\right).
+A_i=\mathrm{RobustCenter}_d\left(a_i(d);q_i(d)\right).
 $$
 
 A robust Huber centre is then fitted across the turbine summaries. If
@@ -288,7 +288,7 @@ same-farm labelled support exists, the farm centre is used; otherwise the
 global centre is used as a fallback:
 
 $$
-C_{\mathrm{corrected}}=\operatorname{HuberCenter}_i(A_i),
+C_{\mathrm{corrected}}=\mathrm{HuberCenter}_i(A_i),
 \qquad
 B_{0,i}=C_{\mathrm{corrected}}-\theta_i^*.
 $$
