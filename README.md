@@ -265,9 +265,15 @@ submission CSV. The cleaning audit makes the SCADA convention explicit:
 missing channel values are treated as unchanged updates, angles are aggregated
 circularly, and linear operating signals are aggregated arithmetically.
 
-`YawMisalignment_Raw_Cleaning_Rebuild.ipynb` contains the corresponding
-data-cleaning reference implementation and sanity checks. Both notebooks
-require the restricted challenge data locally; no raw SCADA is committed.
+`YawMisalignment_Raw_Cleaning_Rebuild.ipynb` is the detailed data-cleaning
+reference and sanity-check notebook. Its first six sections rebuild the
+change-based stream and produce the 15-minute/30-minute branch. Sections 7--9
+are an optional frozen RRS parity audit, not the submission pipeline. The later
+appendix sections are exploratory Power/Ridge diagnostics only: they do not
+predict yaw, create boundaries, or change submissions. The cleaning audit
+embedded in `YawMisalignment_Physical_Diagnostics.ipynb` reuses the same SCADA
+semantics for a compact visual explanation. Both notebooks require the
+restricted challenge data locally; no raw SCADA is committed.
 
 ## Main modelling takeaway
 
