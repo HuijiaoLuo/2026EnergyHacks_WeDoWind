@@ -4,7 +4,7 @@
 
 This document contains the detailed modelling record behind the recruiter-facing [`README.md`](README.md).
 
-It preserves the full methodological progression, calibration details, strict leave-one-turbine-out validation, model-selection audit, public-target diagnostics, ownership boundaries, and reproducibility notes.
+It preserves the full methodological progression, calibration details, strict leave-one-turbine-out (LOTO) validation, model-selection audit, public-target diagnostics, ownership boundaries, and reproducibility notes.
 
 The retained model is named **Physics-Anchored Relative-State (PARS)**. It combines a turbine-specific physics prior for the absolute level with reliability-weighted cross-turbine relative-heading states for persistent changes. The label-free dynamic component is the **Robust Relative-State (RRS)** estimator.
 
