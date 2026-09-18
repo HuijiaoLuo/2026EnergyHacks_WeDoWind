@@ -758,6 +758,11 @@ The repository does not publish:
 
 Data access must be requested separately through WeDoWind / the challenge organizers.
 
+The FarmAnchor exploration notebook expects local copies of
+`turbines_data.zip`, `turbine_locations_PPP.csv`, and
+`turbine_locations_SSS.csv`. It searches the repository and its parent
+directory for these restricted inputs; none are committed here.
+
 Because the source SCADA are restricted, a clean clone cannot reproduce all numerical experiments from raw data.
 
 Executed notebooks are included so that:
@@ -821,6 +826,7 @@ src/
 ├── yaw_relative_state.py
 ├── yaw_model.py
 ├── yaw_farm_anchor.py
+├── yaw_theta_stability.py
 ├── yaw_self_response.py
 └── make_final_submission_vane_level.py
 
@@ -863,10 +869,10 @@ $$
 a_i(d)=y_i(d)+c_{i,0.75}^{\mathrm{soft}}(d)+\theta_i^*.
 $$
 
-to form a quality-weighted turbine-level anchor summary `A_i`:
+to form a quality-weighted turbine-level arithmetic mean `A_i`:
 
 $$
-A_i=\mathrm{RobustCenter}_d\left(a_i(d);q_i(d)\right).
+A_i=\frac{\sum_d q_i(d)a_i(d)}{\sum_d q_i(d)}.
 $$
 
 A robust Huber centre is then fitted across those turbine summaries:
@@ -889,8 +895,10 @@ estimate, not evidence of cross-farm transfer.
 
 The existing frozen relative-state detector, fixed pair/sector baselines, soft
 pair-quality weighting, `lambda=0.75`, `beta=1`, and global-median
-`theta_star` estimator are unchanged. Power does not directly enter the final
-yaw prediction. Strict development-turbine LOTO improved from
+`theta_star` estimator are unchanged. Power is used only in the SCADA-derived
+`theta_star` absolute calibration; it is not used as a day-level dynamic
+predictor or as an input to the relative-state correction. Strict
+development-turbine LOTO improved from
 `0.358° / 0.524°` MAE/RMSE for the release anchor to `0.320° / 0.510°` for the
 corrected anchor. This remains an exploratory anchor variant;
 `YawMisalignment_Independent_Model_Release.ipynb` and the original PARS model

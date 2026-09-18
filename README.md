@@ -222,6 +222,11 @@ Challenge SCADA data are not redistributed here. Data access must be requested s
 
 The repository does not publish raw SCADA, challenge archives, parquet challenge files, or derived caches that may inherit challenge-data restrictions.
 
+Running the FarmAnchor exploration notebook locally additionally requires the
+restricted input files `turbines_data.zip`, `turbine_locations_PPP.csv`, and
+`turbine_locations_SSS.csv`. The notebook searches the repository and its
+parent directory for these files; they are not committed here.
+
 Executed notebooks preserve the modelling history and recorded outputs.
 
 CI focuses on code-level reproducibility. Data-dependent tests are skipped when the local challenge cache is unavailable.
@@ -243,6 +248,7 @@ YawMisalignment_Independent_Model_FarmAnchor_Exploration.ipynb
 
 src/
   yaw_farm_anchor.py
+  yaw_theta_stability.py
 tests/
 slides/
 submissions/
@@ -277,10 +283,11 @@ $$
 a_i(d)=y_i(d)+c_{i,0.75}^{\mathrm{soft}}(d)+\theta_i^*.
 $$
 
-The daily observations are reduced to a quality-weighted turbine-level summary:
+The daily observations are reduced to a quality-weighted turbine-level
+arithmetic mean:
 
 $$
-A_i=\mathrm{RobustCenter}_d\left(a_i(d);q_i(d)\right).
+A_i=\frac{\sum_d q_i(d)a_i(d)}{\sum_d q_i(d)}.
 $$
 
 A robust Huber centre is then fitted across the turbine summaries. If
@@ -296,7 +303,9 @@ $$
 The current full-fit PPP anchor is `C_corrected = -6.155553°`. Relative-heading
 construction, fixed pair/sector baselines, frozen boundaries, soft pair-quality
 weighting, `lambda=0.75`, `beta=1`, and the global-median `theta_star` estimator
-remain unchanged. Power does not directly enter the final yaw prediction.
+remain unchanged. Power is used only in the SCADA-derived `theta_star`
+absolute calibration; it is not used as a day-level dynamic predictor or as
+an input to the relative-state correction.
 
 Strict development-turbine LOTO improves from **0.358° / 0.524°** MAE/RMSE
 for the release anchor to **0.320° / 0.510°** for this corrected anchor.

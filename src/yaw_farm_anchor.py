@@ -6,11 +6,11 @@ absolute centre C used by ``B0_i = C - theta_star_i``.
 
 The exploration first forms daily state-consistent observations
 ``a_i(d) = y_i(d) + c_i(d) + theta_star_i``, reduces them to a
-quality-weighted turbine-level summary, and then applies a robust Huber centre
-across turbines. The historical ``method='mean'`` name is retained for the
-default corrected-mean route; its location estimator is the Huber centre of
-the turbine-level weighted means. Farm centres are preferred when the target
-farm has labelled support, with the global centre as fallback.
+quality-weighted turbine-level arithmetic mean, and then applies a robust
+Huber centre across turbines. The historical ``method='mean'`` name is
+retained for the default corrected-mean route; its location estimator is the
+Huber centre of the turbine-level weighted means. Farm centres are preferred
+when the target farm has labelled support, with the global centre as fallback.
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def summarize_turbine_anchor(
     labels: Mapping[str, pd.Series],
     theta_star: Mapping[str, float],
 ) -> dict:
-    """Build one quality-weighted turbine-level summary for the shared C."""
+    """Build one quality-weighted turbine-level mean for the shared C."""
     daily = build_anchor_observations(
         turbine,
         stage_bundles,
