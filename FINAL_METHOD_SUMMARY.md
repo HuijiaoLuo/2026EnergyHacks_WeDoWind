@@ -1,6 +1,6 @@
-# Final Method Summary — Static Yaw Misalignment
+# Final Method Summary — NADARA Static Yaw Misalignment
 
-**Energy Hackdays / WeDoWind 2026 · Participant 33**
+**Energydata Hackdays / WeDoWind & NADARA 2026 · Participant 33**
 
 This document contains the detailed modelling record behind the recruiter-facing [`README.md`](README.md).
 
@@ -215,7 +215,7 @@ This established that the long-term absolute calibration was useful as a **prior
 
 # 4. Stage II — Team-derived hybrid as a diagnostic experiment
 
-After the constant model underperformed on the public target, it was compared with an independent state-aware T3 model developed by teammate **Daniel**.
+After the constant model underperformed on the public target, it was compared with an independent state-aware T3 model developed by teammate **Daniel**. The related reference repository is [Daniel's NADARA Yaw Misalignment Challenge repository](https://github.com/d-er/NADARA-Yaw-Misalignment-Challenge.git).
 
 Daniel's model supplied:
 
