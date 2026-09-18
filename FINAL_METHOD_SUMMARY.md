@@ -6,7 +6,7 @@ This document contains the detailed modelling record behind the recruiter-facing
 
 It preserves the full methodological progression, calibration details, strict leave-one-turbine-out validation, model-selection audit, public-target diagnostics, ownership boundaries, and reproducibility notes.
 
-The retained model is named **Physics-Anchored Relative-State (PARS)**. It combines a turbine-specific physics prior for the absolute level with reliability-weighted cross-turbine relative-heading states for persistent changes.
+The retained model is named **Physics-Anchored Relative-State (PARS)**. It combines a turbine-specific physics prior for the absolute level with reliability-weighted cross-turbine relative-heading states for persistent changes. The label-free dynamic component is the **Robust Relative-State (RRS)** estimator.
 
 ---
 
@@ -499,7 +499,7 @@ The externally reported public-validation results were:
 
 | Model stage | RMSE | MAE | SHAPE | BIAS | ARI |
 |---|---:|---:|---:|---:|---:|
-| Stability-filtered RRS | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
+| Stability-filtered Robust Relative-State (RRS) | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
 | Physics-Anchored Relative-State (PARS, `lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
 
 The important result is not only the lower RMSE.

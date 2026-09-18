@@ -4,7 +4,7 @@
 
 A physics-informed, label-free SCADA workflow for estimating persistent wind-turbine yaw states and transferring the model to unseen turbines.
 
-The retained model is named **Physics-Anchored Relative-State (PARS)**: a turbine-specific physics prior supplies the absolute level, while reliability-weighted cross-turbine heading states supply persistent changes.
+The retained model is named **Physics-Anchored Relative-State (PARS)**: a turbine-specific physics prior supplies the absolute level, while reliability-weighted cross-turbine heading states supply persistent changes. Its label-free dynamic component is the **Robust Relative-State (RRS)** estimator.
 
 ## Challenge links
 
@@ -175,7 +175,7 @@ The intended behavior is visible in the folds:
 
 | Model stage | RMSE | MAE | SHAPE | BIAS | ARI |
 |---|---:|---:|---:|---:|---:|
-| Stability-filtered RRS | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
+| Stability-filtered Robust Relative-State (RRS) | 2.58° | 2.53° | 2.26° | -1.24° | 1.00 |
 | Physics-Anchored Relative-State (PARS, `lambda=0.75`) | **1.44°** | **1.27°** | **0.99°** | -1.05° | **1.00** |
 
 ARI remains 1.00, so the gain comes primarily from **state-amplitude correction rather than re-segmentation**.
@@ -268,7 +268,7 @@ circularly, and linear operating signals are aggregated arithmetically.
 `YawMisalignment_Raw_Cleaning_Rebuild.ipynb` is the detailed data-cleaning
 reference and sanity-check notebook. Its first six sections rebuild the
 change-based stream and produce the 15-minute/30-minute branch. Sections 7--9
-are an optional frozen RRS parity audit, not the submission pipeline. The later
+are an optional frozen Robust Relative-State (RRS) parity audit, not the submission pipeline. The later
 appendix sections are exploratory Power/Ridge diagnostics only: they do not
 predict yaw, create boundaries, or change submissions. The cleaning audit
 embedded in `YawMisalignment_Physical_Diagnostics.ipynb` reuses the same SCADA
