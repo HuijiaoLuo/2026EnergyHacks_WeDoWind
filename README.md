@@ -245,6 +245,8 @@ README.md
 FINAL_METHOD_SUMMARY.md
 YawMisalignment_Independent_Model_Release.ipynb
 YawMisalignment_Independent_Model_FarmAnchor_Exploration.ipynb
+YawMisalignment_Physical_Diagnostics.ipynb
+YawMisalignment_Raw_Cleaning_Rebuild.ipynb
 
 src/
   yaw_farm_anchor.py
@@ -253,6 +255,19 @@ tests/
 slides/
 submissions/
 ```
+
+`YawMisalignment_Physical_Diagnostics.ipynb` is the public visualization and
+audit notebook. It shows the measured controller-frame angles, the derived
+vane angle, neighbour relative-heading residuals, normalized power views, and
+the cleaning/aggregation path from event updates to 15-minute and 30-minute
+signals. It is descriptive only: it does not fit a model or write a
+submission CSV. The cleaning audit makes the SCADA convention explicit:
+missing channel values are treated as unchanged updates, angles are aggregated
+circularly, and linear operating signals are aggregated arithmetically.
+
+`YawMisalignment_Raw_Cleaning_Rebuild.ipynb` contains the corresponding
+data-cleaning reference implementation and sanity checks. Both notebooks
+require the restricted challenge data locally; no raw SCADA is committed.
 
 ## Main modelling takeaway
 
