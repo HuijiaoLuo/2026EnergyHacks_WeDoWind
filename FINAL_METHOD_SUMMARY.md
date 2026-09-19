@@ -828,6 +828,10 @@ src/
 ├── yaw_model.py
 ├── yaw_farm_anchor.py
 ├── yaw_theta_stability.py
+├── yaw_static_graph_anchor.py
+├── yaw_directional_stable_field.py
+├── yaw_temporal_theta_field.py
+├── yaw_quarter_balanced_anchor.py
 ├── yaw_self_response.py
 └── make_final_submission_vane_level.py
 
@@ -837,7 +841,12 @@ submissions/
 └── Results_33_T3_final.csv
 
 tests/
-└── test_final_method.py
+├── test_final_method.py
+├── test_theta_stability.py
+├── test_static_graph_anchor.py
+├── test_directional_stable_field.py
+├── test_temporal_theta_field.py
+└── test_quarter_balanced_anchor.py
 ```
 
 The Daniel-derived notebook is retained as historical provenance, not as a dependency of PARS.
@@ -917,6 +926,28 @@ and ARI show that the relative-state dynamics and segmentation were unaffected.
 The slight degradation shows that this corrected anchor did not improve
 absolute-level transfer on the unseen turbine, so FarmAnchor is not promoted to
 the retained model.
+
+### Additional absolute-anchor audits
+
+The same exploration notebook then tested whether the long-run field could be
+made more robust without changing the frozen relative-state dynamics. All
+audits were label-free on the SCADA side and were evaluated with strict
+turbine-level LOTO. None is promoted to the release path.
+
+| Audit | What changed | Macro result | Decision |
+|---|---|---:|---|
+| StaticGraphAnchor | Used static pair/sector heading offsets as turbine-specific anchor coordinates | MAE/RMSE about 92.15/92.15; disconnected components and ±138° offsets | Rejected: encoder/reference geometry, not absolute yaw |
+| DirectionalStableField | Replaced `theta_star` with same-farm, wind-sector peer-standardised coordinates | 0.571° / 0.673° vs release-control 0.358° / 0.524° | Rejected: distorted useful turbine-to-turbine absolute geometry |
+| TemporalCommonMode theta | Removed same-farm daily deviations around each turbine's own `theta_star` | 1.052° / 1.170° vs release-control 0.358° / 0.524° | Rejected: common variation was not removable nuisance |
+| QuarterBalancedFarmAnchor | Made calendar quarters equally weighted in the \(C_f\) aggregation | 0.326–0.361° MAE and 0.520–0.526° RMSE vs current 0.320/0.510 | Rejected: downweighted low-quality early periods were reintroduced |
+
+The audits support retaining the existing turbine-specific global-median
+`theta_star` and, within the FarmAnchor experiment, the daily quality-weighted
+turbine mean followed by a cross-turbine Huber centre. They do not establish
+that FarmAnchor transfers better across farms; its blind PPP_WTG17 result above
+remains the relevant external check. Further anchor changes require new
+independent absolute calibration information rather than additional
+reweighting of the same three PPP labels.
 
 ---
 
