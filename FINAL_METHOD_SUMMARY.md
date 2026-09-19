@@ -718,6 +718,7 @@ The validation-submission history is summarized below. Filenames are preserved a
 
 | Entry | Submission | Model / note |
 |---|---|---|
+| Sub #5 | Results_33_T3_5.csv | FarmAnchor corrected absolute centre: external PPP_WTG17 result RMSE 1.49°, MAE 1.31°, SHAPE 0.99°, BIAS −1.12°, ARI 1.00. Exploratory only; original PARS remains the release reference. |
 | #20 | Results_33_T3_4.csv | Latest Stability-filtered RRS: frozen label-free boundaries, soft pair-quality weighting with a 2.5° scale, partial amplitude lambda=0.75, B0_i=C-theta_star_i, and fixed beta=1. Contains all 731 PPP_WTG17 dates; no target labels were used. Strict LOTO reference: MAE 0.358°, RMSE 0.524°. |
 | Previous RRS update | Results_33_T3_3.csv | Stability-filtered RRS validation submission. Strict LOTO reference: MAE 0.362°, RMSE 0.610°. |
 | #14 | Results_33_T3_2.csv | Independent same-site relative-power-efficiency state model. Strict nested turbine-level LOTO: macro MAE 0.420°, RMSE 0.564°; 731 PPP_WTG17 rows and two predicted clusters. |
@@ -902,8 +903,20 @@ development-turbine LOTO improved from
 `0.358° / 0.524°` MAE/RMSE for the release anchor to `0.320° / 0.510°` for the
 corrected anchor. This remains an exploratory anchor variant;
 `YawMisalignment_Independent_Model_Release.ipynb` and the original PARS model
-are preserved as the release reference. No new external leaderboard validation
-has been performed.
+are preserved as the release reference.
+
+The subsequent blind PPP_WTG17 external validation was:
+
+| Anchor | RMSE | MAE | SHAPE | BIAS | ARI |
+|---|---:|---:|---:|---:|---:|
+| Release PARS | 1.44° | 1.27° | 0.99° | −1.05° | 1.00 |
+| FarmAnchor corrected | 1.49° | 1.31° | 0.99° | −1.12° | 1.00 |
+
+Since FarmAnchor changes only the shared absolute centre, the unchanged SHAPE
+and ARI show that the relative-state dynamics and segmentation were unaffected.
+The slight degradation shows that this corrected anchor did not improve
+absolute-level transfer on the unseen turbine, so FarmAnchor is not promoted to
+the retained model.
 
 ---
 

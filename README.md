@@ -332,6 +332,11 @@ Strict development-turbine LOTO improves from **0.358° / 0.524°** MAE/RMSE
 for the release anchor to **0.320° / 0.510°** for this corrected anchor.
 The PPP development set currently contains only one farm, so this is mainly a
 robust corrected global/farm-anchor test, not a validated cross-farm transfer
-result. There is no new external leaderboard validation yet.
+result. The subsequent blind PPP_WTG17 external test gave **RMSE 1.49° / MAE
+1.31° / SHAPE 0.99° / BIAS −1.12° / ARI 1.00**, compared with the release
+PARS result of **1.44° / 1.27° / 0.99° / −1.05° / 1.00**. Because only the
+shared anchor changed, the unchanged SHAPE and ARI confirm that the dynamic
+state estimator was unaffected; the slight degradation came from absolute-level
+transfer. FarmAnchor therefore remains an exploratory, non-retained candidate.
 
 Repository: `HuijiaoLuo/2026EnergyHacks_WeDoWind`
