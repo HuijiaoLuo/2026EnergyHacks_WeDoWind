@@ -339,4 +339,11 @@ shared anchor changed, the unchanged SHAPE and ARI confirm that the dynamic
 state estimator was unaffected; the slight degradation came from absolute-level
 transfer. FarmAnchor therefore remains an exploratory, non-retained candidate.
 
+The same notebook also contains negative audits of static heading graphs,
+directional/temporal `theta_star` field corrections, and quarter-balanced
+farm-anchor aggregation. None improved the strict LOTO reference, so the
+release PARS anchor remains unchanged. For the experimental procedures,
+metrics, and rejection rationale, see the **Additional absolute-anchor
+audits** section in [`FINAL_METHOD_SUMMARY.md`](FINAL_METHOD_SUMMARY.md).
+
 Repository: `HuijiaoLuo/2026EnergyHacks_WeDoWind`
